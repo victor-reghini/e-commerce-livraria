@@ -1,0 +1,17 @@
+target/
+.git/
+.github/
+.idea/
+*.iml
+.vscode/
+.agents/
+.cursor/
+*.log
+docker-compose*.yml
+.env*
+scripts/
+README.md
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+

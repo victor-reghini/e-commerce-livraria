@@ -1,0 +1,131 @@
+spring:
+  application:
+    name: ecommerce-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ecommerce_db}
+    username: ${SPRING_DATASOURCE_USERNAME:ecommerce_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:ecommerce_secret_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: EcommerceHikariPool
+      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:20}
+      minimum-idle: ${HIKARI_MIN_IDLE:5}
+      idle-timeout: 300000
+      connection-timeout: 20000
+      max-lifetime: 1200000
+      auto-commit: true
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          lob:
+            non_contextual_creation: true
+        order_inserts: true
+        order_updates: true
+        batch_versioned_data: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+    validate-on-migrate: true
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:redis_secret_password}
+      timeout: 2000ms
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:rabbit_user}
+    password: ${SPRING_RABBITMQ_PASSWORD:rabbit_secret_password}
+    virtual-host: /
+    listener:
+      simple:
+        concurrency: 2
+        max-concurrency: 10
+        prefetch: 10
+        retry:
+          enabled: true
+          initial-interval: 1000ms
+          max-attempts: 3
+          multiplier: 2.0
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  compression:
+    enabled: true
+    mime-types: text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json
+
+# ==============================================================================
+# Observabilidade, Métricas e Actuator
+# ==============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${ENVIRONMENT:development}
+
+# ==============================================================================
+# Documentação Swagger / OpenAPI
+# ==============================================================================
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    enabled: true
+
+# ==============================================================================
+# Configurações Customizadas da Aplicação (Twelve-Factor)
+# ==============================================================================
+app:
+  environment: ${ENVIRONMENT:development}
+  security:
+    jwt:
+      secret: ${JWT_SECRET:super-secret-jwt-signing-key-ecommerce-platform-2026-production-ready-key}
+      expiration-seconds: ${JWT_EXPIRATION_SECONDS:86400}
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:5173}
+  storage:
+    region: ${AWS_REGION:us-east-1}
+    access-key: ${AWS_ACCESS_KEY_ID:minio_admin_user}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:minio_admin_secret_password}
+    endpoint-url: ${AWS_ENDPOINT_URL:http://localhost:9000}
+    path-style-access: ${AWS_S3_PATH_STYLE_ACCESS_ENABLED:true}
+    bucket-media: ${AWS_S3_BUCKET_MEDIA:ecommerce-media}
+    bucket-ebooks: ${AWS_S3_BUCKET_EBOOKS:ecommerce-ebooks}
+

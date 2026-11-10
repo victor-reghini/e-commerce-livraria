@@ -1,0 +1,9 @@
+spring:
+  jpa:
+    show-sql: false
+  flyway:
+    validate-on-migrate: true
+
+logging:
+  config: classpath:logback-spring.xml
+

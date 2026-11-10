@@ -1,0 +1,280 @@
+# ==============================================================================
+# docker-compose.vps.yml
+# Orquestração de Produção para VPS Linux (Princípio Twelve-Factor & Zero Lock-in)
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # 1. Reverse Proxy & Roteamento Dinâmico SSL (Traefik v3)
+  # ============================================================================
+  traefik:
+    image: traefik:v3.1
+    container_name: ecommerce-traefik
+    restart: always
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - TRAEFIK_ACME_EMAIL=${TRAEFIK_ACME_EMAIL:-admin@livrariamatriz.com.br}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - traefik_acme:/etc/traefik
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    networks:
+      - app-network
+
+  # ============================================================================
+  # 2. Banco de Dados PostgreSQL 16 com RLS (Host Persistente)
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecommerce-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-ecommerce_db}
+      POSTGRES_USER: ${DATABASE_USER:-ecommerce_user}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-ecommerce_secret_password}
+    volumes:
+      - /var/lib/ecommerce/postgres:/var/lib/postgresql/data
+      - ./docker/postgres/init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-ecommerce_user} -d ${DATABASE_NAME:-ecommerce_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+    networks:
+      - app-network
+
+  # ============================================================================
+  # 3. Cache & Sessões (Redis 7)
+  # ============================================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: ecommerce-redis
+    restart: always
+    command: >
+      redis-server
+      --requirepass ${SPRING_DATA_REDIS_PASSWORD:-redis_secret_password}
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - /var/lib/ecommerce/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${SPRING_DATA_REDIS_PASSWORD:-redis_secret_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    networks:
+      - app-network
+
+  # ============================================================================
+  # 4. Armazenamento S3-Compatible Local (MinIO)
+  # ============================================================================
+  minio:
+    image: minio/minio:RELEASE.2024-10-02T17-50-41Z
+    container_name: ecommerce-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio_admin_user}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_admin_secret_password}
+    volumes:
+      - /var/lib/ecommerce/minio:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minio-api.rule=Host(`s3.${DOMAIN_NAME:-seudominio.com.br}`)"
+      - "traefik.http.routers.minio-api.entrypoints=websecure"
+      - "traefik.http.routers.minio-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.minio-api.loadbalancer.server.port=9000"
+    networks:
+      - app-network
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-10-02T08-27-28Z
+    container_name: ecommerce-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_HOST: minio
+      MINIO_PORT: 9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio_admin_user}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_admin_secret_password}
+      AWS_S3_BUCKET_MEDIA: ${AWS_S3_BUCKET_MEDIA:-ecommerce-media}
+      AWS_S3_BUCKET_EBOOKS: ${AWS_S3_BUCKET_EBOOKS:-ecommerce-ebooks}
+    volumes:
+      - ./docker/minio/init-buckets.sh:/init-buckets.sh:ro
+    entrypoint: ["/bin/sh", "/init-buckets.sh"]
+    networks:
+      - app-network
+
+  # ============================================================================
+  # 5. Mensageria Assíncrona (RabbitMQ 3)
+  # ============================================================================
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: ecommerce-rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-rabbit_user}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-rabbit_secret_password}
+    volumes:
+      - /var/lib/ecommerce/rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+    networks:
+      - app-network
+
+  # ============================================================================
+  # 6. Observabilidade: Prometheus & Grafana Loki
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: ecommerce-prometheus
+    restart: always
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+    networks:
+      - app-network
+
+  loki:
+    image: grafana/loki:3.2.0
+    container_name: ecommerce-loki
+    restart: always
+    volumes:
+      - ./docker/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+    networks:
+      - app-network
+
+  promtail:
+    image: grafana/promtail:3.2.0
+    container_name: ecommerce-promtail
+    restart: always
+    volumes:
+      - ./docker/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 256M
+    networks:
+      - app-network
+
+  # ============================================================================
+  # 7. Backend Java 21 Spring Boot (Loom / Virtual Threads)
+  # ============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecommerce-backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      ENVIRONMENT: production
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DATABASE_NAME:-ecommerce_db}
+      SPRING_DATASOURCE_USERNAME: ${DATABASE_USER:-ecommerce_user}
+      SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:-ecommerce_secret_password}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${SPRING_DATA_REDIS_PASSWORD:-redis_secret_password}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-rabbit_user}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-rabbit_secret_password}
+      AWS_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio_admin_user}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio_admin_secret_password}
+      AWS_REGION: us-east-1
+      AWS_S3_PATH_STYLE_ACCESS_ENABLED: "true"
+      AWS_S3_BUCKET_MEDIA: ${AWS_S3_BUCKET_MEDIA:-ecommerce-media}
+      AWS_S3_BUCKET_EBOOKS: ${AWS_S3_BUCKET_EBOOKS:-ecommerce-ebooks}
+      JWT_SECRET: ${JWT_SECRET}
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`${BACKEND_SUBDOMAIN:-api.seudominio.com.br}`) || HostRegexp(`{subdomain:[a-z0-9-]+}.${DOMAIN_NAME:-seudominio.com.br}`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q 'UP' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  traefik_acme:
+  prometheus_data:
+  loki_data:
+
