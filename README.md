@@ -180,12 +180,114 @@ O backend possui desacoplamento total de provedor de nuvem via variáveis de amb
 
 ---
 
-## 7. Próximos Passos (Roadmap de Sprints)
+## 7. Roadmap Detalhado de Sprints & Atividades
 
-- [x] **Sprint 0:** Fundação de Infraestrutura Portátil (VPS/Docker), Setup de Projeto Java 21, Flyway baseline, RLS PostgreSQL e CI/CD.
-- [ ] **Sprint 1:** Multi-Tenancy avançado, RBAC granular e vinculação de usuários.
-- [ ] **Sprint 2:** Catálogo de Produtos e Gestão de Estoque em Massa (Livros, ISBN, Variações SKU, Kits e importação em lote).
-- [ ] **Sprint 3:** Múltiplos Estoques físicos (Matriz, Balcão, Feiras/Eventos externos) e rotinas de romaneio/conferência cega.
-- [ ] **Sprint 4:** PDV Mobile e Venda Balcão / Feira (React PWA com câmera/leitor de código de barras e NFC-e).
-- [ ] **Sprint 5:** E-commerce Público, Pagar.me V5 (PIX, Boleto, Cartão) e Vendas a Prazo com trava de inadimplência.
-- [ ] **Sprint 6:** Observabilidade completa com OpenTelemetry e testes de carga simulando 100.000 requisições simultâneas.
+Plano de ação e cronograma faseado de atividades para o desenvolvimento completo do ecossistema, baseado na especificação técnica oficial:
+
+### Sprint 0: Fundação de Infraestrutura Portátil (VPS/Docker) e Setup de Projeto `[CONCLUÍDO]`
+- [x] **Repositórios Monorepo ou Multi-Repo**: Definição da estratégia multi-repo com este repositório dedicado exclusivamente ao Backend Java 21 + Infraestrutura e configurações de deploy.
+- [x] **Orquestração Portátil Docker Compose**: Criação de `docker-compose.yml` (dev) e `docker-compose.vps.yml` (produção VPS) completo com Traefik v3, PostgreSQL 16 (RLS ativado), Redis 7, MinIO (S3-compatible) com provisionamento automático de buckets, RabbitMQ 3 e observability stack.
+- [x] **Padronização Twelve-Factor App**: Parametrização integral por variáveis de ambiente (`.env.example`, `application.yml`, `application-prod.yml`) garantindo zero cloud-lock-in para chaveamento imediato de MinIO/PostgreSQL para AWS S3/RDS no futuro.
+- [x] **Baseline do Projeto Java 21 com Flyway**: Configuração do Spring Boot 3.3.5, Clean Architecture / Arquitetura Hexagonal, isolamento via `TenantAwareDataSource` injetando `SET LOCAL app.current_tenant` no HikariCP, migrações `V1__init_schema_multitenant_rls.sql` e seed `V2__seed_initial_tenant.sql`.
+- [x] **Suporte a Virtual Threads (Project Loom)**: Habilitação de concorrência massiva de I/O bloqueante sem contenção de pool de threads do SO (`spring.threads.virtual.enabled=true`).
+- [x] **Pipeline de CI/CD (GitHub Actions)**: Configuração de build, testes e compilação Java 21 (`ci.yml`) e deploy automatizado via SSH/Docker Compose na VPS (`deploy.yml`).
+
+---
+
+### Sprint 1: Multi-Tenancy, Autenticação e Gestão de Usuários `[EM ANDAMENTO]`
+- [x] **Modelo de Dados de Tenants, Empresas e RLS**:
+  - Modelagem da tabela `companies` representando matriz, filiais físicas e stands de feiras/eventos vinculados ao Tenant com isolamento RLS.
+  - Vínculo N:N de usuários às empresas permitidas (`user_companies`) com proteção estrita por Row-Level Security.
+- [ ] **Filtro/Interceptor HTTP para Resolução de Tenant**:
+  - Extração de `x-tenant-id` a partir do cabeçalho HTTP, subdomínio (`Host`) ou claims do token JWT.
+  - Endpoint de resolução pública de dados visuais do tenant (`/api/v1/auth/tenant-info` ou `/api/v1/tenants/resolve`) para customização da tela de login no frontend.
+- [ ] **Autenticação JWT com Spring Security e RBAC Granular**:
+  - Tabelas de permissões (`permissions`), perfis (`roles`) e associação (`role_permissions`).
+  - Perfis estruturados: `SUPER_ADMIN`, `TENANT_ADMIN`, `STORE_MANAGER`, `ATTENDANT` (Caixa/Balcão) e `CUSTOMER`.
+  - Autenticação stateless com JWT contendo `tenant_id`, `user_id`, `role` e authorities granulares (`CATALOG_WRITE`, `PDV_SELL`, `STOCK_TRANSFER`, etc.).
+  - Mecanismo de Refresh Token com rotação e controle de blacklist no Redis.
+- [ ] **Endpoints de Gestão de Usuários (CRUD)**:
+  - Criação, listagem paginada, edição de perfil, redefinição de senha e bloqueio/ativação de colaboradores do tenant.
+- [ ] **Integração com Frontend (Tela de Login Unificada)**:
+  - Disponibilização de contratos REST para seleção e validação visual de loja (cores, logo e nome) antes do envio das credenciais.
+
+---
+
+### Sprint 2: Catálogo de Produtos e Gestão de Estoque em Massa
+- [ ] **Modelagem Avançada de Produtos com Variações (Pai & Filhos / SKUs)**:
+  - Entidade de Produto Pai concentrando metadados gerais (título, sinopse, autores, editora, categorias).
+  - Produtos Filhos (SKUs) com atributos variantes (tipo de encadernação [brochura, capa dura, espiral], volume, ano de edição, ou cor/tamanho para varejo geral).
+  - Código de barras próprio por variação (EAN-13 / ISBN), precificação independente e dimensões cúbicas para frete.
+- [ ] **Modelagem de Dados Específicos para Livros**:
+  - ISBN individual por variação, Ficha Catalográfica padronizada, metadados de Autores/Tradutores/Ilustradores e suporte a E-book com download seguro via URLs pré-assinadas (S3/MinIO).
+- [ ] **Kits e Combos de Produtos (Bundles / Produtos Compostos)**:
+  - *Kit com Estoque Virtual Dinâmico*: disponibilidade calculada dinamicamente pelo menor saldo entre os itens filhos, debitando automaticamente os componentes unitários no faturamento.
+  - *Kit Físico Pré-montado*: saldo próprio e reservado.
+  - *Motor de Tratamento Fiscal de Kits*: decomposição e rateio proporcional do valor faturado com aplicação de NCM, CFOP e alíquotas fiscais específicas de cada item constituinte na NF-e/NFC-e.
+- [ ] **Endpoints REST de CRUD do Catálogo**:
+  - Gerenciamento completo de produtos, variações, validação de ISBN e upload de capas/mídias com presigned URLs no S3/MinIO.
+- [ ] **Módulo de Importação em Lote de Planilhas (Streaming)**:
+  - Processamento de arquivos Excel (XLSX) e CSV de até 50.000 livros utilizando Apache POI em modo streaming (SXSSF) ou FastExcel com Spring Batch.
+  - Processamento em chunks de 500 registros com controle transacional e rollback isolado por linha inválida.
+- [ ] **Suporte ao Painel Administrativo**:
+  - Endpoints para listagem rápida com filtros facetados, seletores dinâmicos de variações e construtor visual de kits.
+
+---
+
+### Sprint 3: Múltiplos Estoques e Gestão de Eventos / Feiras
+- [ ] **Modelagem de Múltiplos Estoques Físicos**:
+  - Entidades de Estoque segregadas por localidade: Matriz, Balcão de Loja Física, Depósito Central e Eventos/Feiras Acadêmicas.
+  - Movimentações de Transferência de estoque entre unidades com controle de status (`SOLICITADO`, `EM_TRANSITO`, `RECEBIDO`, `DIVERGENCIA`).
+- [ ] **Rotinas de Romaneio de Saída para Eventos**:
+  - Geração de romaneio de remessa para feiras e eventos externos com reserva temporária de estoque e emissão de documentação de transporte.
+- [ ] **Conferência Cega de Retorno (Bipagem)**:
+  - Módulo de conferência cega na volta do evento via leitura de código de barras (bipagem) para apuração imediata de sobras, perdas e conciliação de vendas.
+- [ ] **Dashboard Operacional de Feiras em Tempo Real**:
+  - Endpoints para acompanhamento em tempo real das vendas presenciais, faturamento por stand e saldo remanescente por evento.
+
+---
+
+### Sprint 4: PDV Mobile e Venda Balcão / Feira
+- [ ] **Backend para Suporte a PDV Desacoplado & Modo Offline**:
+  - Endpoints ultra-rápidos e leves para sincronização de catálogo, clientes e fila de vendas offline com resolução de conflitos.
+- [ ] **Integração com Leitura Óptica de Código de Barras (Câmera & USB)**:
+  - Suporte à leitura de EAN-13 e ISBN via BarcodeDetector API / ZXing no PDV mobile e leitores laser USB tradicionais.
+- [ ] **Fluxo de Venda Balcão / Evento (Strategy Pattern)**:
+  - Bipagem dos itens → aplicação de desconto rápido → pagamento presencial (PIX Dinâmico, Cartão maquininha TEF/POS ou Dinheiro) → baixa imediata e exclusiva no estoque da unidade/feira ativa → conclusão sem frete.
+- [ ] **Emissão Instantânea de NFC-e (Modelo 65)**:
+  - Emissão síncrona/assíncrona de cupom fiscal eletrônico com impressão térmica (ESC/POS) ou envio digital via WhatsApp/E-mail.
+- [ ] **Controle Financeiro de Caixa**:
+  - Controle de abertura de caixa, suprimento, sangria (retirada) e fechamento cego de turno com conferência e relatório de quebra de caixa.
+
+---
+
+### Sprint 5: E-Commerce Público, Pagar.me e Vendas a Prazo
+- [ ] **Backend para Loja Pública Mobile-First**:
+  - Endpoints otimizados para catalogação rápida, busca textual com autocomplete, Drawer de filtros facetados (preço, categoria, autor, editora) e paginação leve.
+- [ ] **Carrinho & Checkout Otimizado para 1-Clique**:
+  - Cálculo de frete multi-transportadora (Correios e Melhor Envio com caching no Redis).
+  - Checkout transparente integrado à API v5 do Pagar.me:
+    - **PIX**: geração de QR Code dinâmico e chave "Copia e Cola" em milissegundos.
+    - **Cartão de Crédito**: tokenização direta de cartão e antifraude integrado.
+    - **Boleto Bancário**: geração com registro imediato.
+  - Webhooks assíncronos do Pagar.me com tratamento de idempotência e retentativas automáticas no RabbitMQ.
+- [ ] **Fluxo de Venda a Prazo (Faturamento / Orçamento Institucional)**:
+  - Criação de Orçamento corporativo pelo gestor ou cliente institucional.
+  - Envio do espelho do orçamento para aprovação formal.
+  - **Trava de Inadimplência**: bloqueio rigoroso e automático de aprovação de novos orçamentos caso o cliente possua qualquer pedido faturado pendente e vencido, até quitação integral.
+  - Orçamento aprovado → geração do boleto faturado (ex.: prazo 30 dias) e liberação do despacho com rastreamento.
+- [ ] **Expedição e Logística**:
+  - Emissão automática de NF-e (modelo 55) pós-aprovação do pagamento e geração automática de etiquetas de postagem e rastreio.
+
+---
+
+### Sprint 6: Observabilidade, Auditoria e Homologação Fiscal
+- [ ] **Telemetria Distribuída e Métricas (OpenTelemetry & Tempo)**:
+  - Rastreamento distribuído ponta a ponta correlacionando requisições HTTP, queries SQL no PostgreSQL com RLS e chamadas a gateways externos.
+  - Painéis no Grafana monitorando taxa de conversão de checkout, latência da API dos Correios, tempo de resposta da SEFAZ e consumo de CPU/Virtual Threads.
+- [ ] **Homologação Fiscal SEFAZ**:
+  - Testes e homologação ponta a ponta de emissão, contingência e cancelamento de NF-e (modelo 55) e NFC-e (modelo 65) em ambiente de homologação da SEFAZ.
+- [ ] **Testes de Carga & Estresse**:
+  - Testes de carga utilizando k6 e Gatling simulando concorrência de 100.000 requisições simultâneas e picos de acessos com Virtual Threads.
+- [ ] **Validação do Roteiro de Migração VPS → AWS**:
+  - Teste prático de migração com restore de dump no Amazon RDS PostgreSQL e chaveamento de storage MinIO para Amazon S3 nativo via variáveis de ambiente.
