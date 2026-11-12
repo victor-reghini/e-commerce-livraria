@@ -28,7 +28,7 @@ public class AuditController {
     }
 
     @GetMapping("/logs")
-    @PreAuthorize("hasAnyAuthority('AUDIT_VIEW', 'ADMIN')")
+    @PreAuthorize("hasAnyAuthority('AUDIT_VIEW', 'ADMIN', 'ROLE_TENANT_ADMIN', 'ROLE_SUPER_ADMIN')")
     @Operation(summary = "Consultar Trilha de Auditoria com Filtros e Mascaramento LGPD/PCI-DSS",
             description = "Retorna logs de auditoria imutáveis com mascaramento automático de CPF, senhas e tokens de cartão.")
     public ResponseEntity<AuditDto.AuditLogPageResponse> queryLogs(

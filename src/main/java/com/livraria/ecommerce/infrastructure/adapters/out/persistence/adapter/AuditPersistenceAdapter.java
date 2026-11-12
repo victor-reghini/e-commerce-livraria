@@ -4,11 +4,15 @@ import com.livraria.ecommerce.domain.model.audit.AuditLog;
 import com.livraria.ecommerce.domain.port.out.AuditRepositoryPort;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.AuditLogJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.repository.SpringDataAuditLogRepository;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,7 +39,9 @@ public class AuditPersistenceAdapter implements AuditRepositoryPort {
     @Override
     @Transactional(readOnly = true)
     public List<AuditLog> findLogs(UUID tenantId, String action, String resourceType, Instant from, Instant to, int page, int size) {
-        return auditRepository.findLogsFiltered(tenantId, action, resourceType, from, to, PageRequest.of(page, size))
+        Specification<AuditLogJpaEntity> spec = createSpecification(tenantId, action, resourceType, from, to);
+        PageRequest pageRequest = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        return auditRepository.findAll(spec, pageRequest)
                 .stream()
                 .map(this::toDomain)
                 .toList();
@@ -44,7 +50,29 @@ public class AuditPersistenceAdapter implements AuditRepositoryPort {
     @Override
     @Transactional(readOnly = true)
     public long countLogs(UUID tenantId, String action, String resourceType, Instant from, Instant to) {
-        return auditRepository.countLogsFiltered(tenantId, action, resourceType, from, to);
+        Specification<AuditLogJpaEntity> spec = createSpecification(tenantId, action, resourceType, from, to);
+        return auditRepository.count(spec);
+    }
+
+    private Specification<AuditLogJpaEntity> createSpecification(
+            UUID tenantId, String action, String resourceType, Instant from, Instant to) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("tenantId"), tenantId));
+            if (action != null && !action.isBlank()) {
+                predicates.add(cb.equal(root.get("action"), action));
+            }
+            if (resourceType != null && !resourceType.isBlank()) {
+                predicates.add(cb.equal(root.get("resourceType"), resourceType));
+            }
+            if (from != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), from));
+            }
+            if (to != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), to));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     private AuditLogJpaEntity toEntity(AuditLog log) {
