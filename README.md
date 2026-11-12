@@ -183,6 +183,66 @@ classDiagram
         +String cfop
     }
 
+    class StockTransfer {
+        +UUID id
+        +UUID tenantId
+        +String transferNumber
+        +UUID originCompanyId
+        +UUID destinationCompanyId
+        +TransferStatus status
+        +TransferType transferType
+        +List~StockTransferItem~ items
+        +dispatch(UUID dispatchedBy)
+        +receive(Map quantities, UUID receivedBy)
+        +calculateTotalItems() int
+        +calculateTotalValue() BigDecimal
+    }
+
+    class StockTransferItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +int quantityRequested
+        +int quantityDispatched
+        +int quantityReceived
+        +int getDivergence()
+        +BigDecimal unitPrice
+    }
+
+    class StockMovement {
+        +UUID id
+        +UUID tenantId
+        +UUID companyId
+        +UUID skuId
+        +MovementType movementType
+        +int quantityChange
+        +int balanceAfter
+        +UUID referenceId
+        +String reason
+    }
+
+    class BlindAudit {
+        +UUID id
+        +UUID tenantId
+        +UUID companyId
+        +String code
+        +AuditStatus status
+        +List~BlindAuditItem~ items
+        +scanBarcode(UUID skuId, int count)
+        +finalizeAudit()
+        +reconcile()
+        +getTotalDivergence() int
+    }
+
+    class BlindAuditItem {
+        +UUID id
+        +UUID skuId
+        +int quantityScanned
+        +int quantityExpected
+        +int divergence
+        +incrementScanned(int count)
+    }
+
     Tenant "1" --> "*" Company : possui filiais
     Tenant "1" --> "*" User : possui colaboradores
     Tenant "1" --> "*" Product : cataloga
@@ -191,6 +251,11 @@ classDiagram
     Sku "1" --> "1" Dimensions : medidas frete
     Sku ..> FiscalDecompositionItem : decompõe em
     Sku ..> IsbnValidator : valida
+    Company "1" --> "*" StockTransfer : remessas
+    StockTransfer "1" --> "*" StockTransferItem : itens
+    Company "1" --> "*" StockMovement : ledger
+    Company "1" --> "*" BlindAudit : auditorias de retorno
+    BlindAudit "1" --> "*" BlindAuditItem : contagens bipadas
 ```
 
 ### 1.3. Diagrama Entidade-Relacionamento (ER) com Row-Level Security
@@ -282,6 +347,63 @@ erDiagram
         uuid sku_id FK
         int quantity
         int reserved_quantity
+    }
+
+    stock_transfers {
+        uuid id PK
+        uuid tenant_id FK
+        varchar transfer_number UK
+        uuid origin_company_id FK
+        uuid destination_company_id FK
+        varchar status
+        varchar transfer_type
+        timestamp dispatched_at
+        timestamp received_at
+    }
+
+    stock_transfer_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid transfer_id FK
+        uuid sku_id FK
+        int quantity_requested
+        int quantity_dispatched
+        int quantity_received
+        numeric unit_cost
+        numeric unit_price
+    }
+
+    stock_movements {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid sku_id FK
+        varchar movement_type
+        int quantity_change
+        int balance_after
+        uuid reference_id
+        timestamp created_at
+    }
+
+    blind_audits {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid transfer_id FK
+        varchar code UK
+        varchar status
+        uuid auditor_id
+        timestamp completed_at
+    }
+
+    blind_audit_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid audit_id FK
+        uuid sku_id FK
+        int quantity_scanned
+        int quantity_expected
+        int divergence
     }
 ```
 
@@ -375,6 +497,80 @@ sequenceDiagram
     end
     Batch-->>Ctrl: BatchImportResult {total: 1000, sucesso: 998, falhas: 2, errors: [...]}
     Ctrl-->>Admin: 200 OK + Relatório de Auditoria
+```
+
+#### E. Remessa de Estoque para Evento / Feira e Emissão de Romaneio
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Gestor as Gestor de Operações
+    participant Ctrl as EventStockController
+    participant Service as EventStockService
+    participant StockRepo as StockRepositoryPort
+    participant MoveRepo as StockMovementRepositoryPort
+    participant TransferRepo as StockTransferRepositoryPort
+
+    Note over Gestor,TransferRepo: 1. Criação da Transferência e Reserva Temporária de Estoque
+    Gestor->>Ctrl: POST /api/v1/transfers (Origem: Matriz, Destino: Feira Bienal, Itens: [SKU-1: 50 un])
+    Ctrl->>Service: createTransfer(request, userId)
+    Service->>StockRepo: getAvailableStock(Matriz, SKU-1)
+    StockRepo-->>Service: Saldo disponível = 120 un (OK >= 50)
+    Service->>StockRepo: reserveStock(Matriz, SKU-1, 50)
+    Service->>MoveRepo: save(StockMovement: RESERVA, -50 un, ref: transferId)
+    Service->>TransferRepo: save(Transfer: RESERVADO)
+    TransferRepo-->>Ctrl: 201 Created (TRF-2026-001)
+
+    Note over Gestor,TransferRepo: 2. Despacho e Saída Física de Estoque
+    Gestor->>Ctrl: POST /api/v1/transfers/{id}/dispatch
+    Ctrl->>Service: dispatchTransfer(transferId, userId)
+    Service->>StockRepo: transferStock (Dedução física na Matriz)
+    Service->>MoveRepo: save(StockMovement: TRANSFERENCIA_SAIDA, -50 un)
+    Service->>TransferRepo: save(Transfer: EM_TRANSITO)
+    TransferRepo-->>Ctrl: 200 OK (Status: EM_TRANSITO)
+
+    Note over Gestor,TransferRepo: 3. Geração do Romaneio de Transporte
+    Gestor->>Ctrl: GET /api/v1/transfers/{id}/romaneio
+    Ctrl->>Service: generateRomaneio(transferId)
+    Service-->>Ctrl: RomaneioDocumentResponse (Peso Cúbico: 25.000g, R$ 2.450,00, Dados Fiscais)
+    Ctrl-->>Gestor: 200 OK (Documento gerado para transporte)
+```
+
+#### F. Conferência Cega de Retorno com Bipagem e Conciliação no Ledger
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operador as Operador de Conferência (Logística)
+    participant Ctrl as EventStockController
+    participant Service as EventStockService
+    participant SkuRepo as SpringDataSkuRepository
+    participant AuditRepo as BlindAuditRepositoryPort
+    participant StockRepo as StockRepositoryPort
+    participant MoveRepo as StockMovementRepositoryPort
+
+    Note over Operador,MoveRepo: 1. Abertura da Conferência Cega vinculada à Remessa
+    Operador->>Ctrl: POST /api/v1/audits (companyId: Feira, transferId: TRF-001)
+    Ctrl->>Service: createBlindAudit(request)
+    Service->>AuditRepo: save(BlindAudit: ABERTA, expectedQuantities do Romaneio)
+    AuditRepo-->>Ctrl: 201 Created (AUD-100)
+
+    Note over Operador,MoveRepo: 2. Bipagem Rápida de Códigos de Barras / ISBNs
+    loop Para cada exemplar físico desembalado
+        Operador->>Ctrl: POST /api/v1/audits/{id}/scan (barcode: "9788535902778", qty: 1)
+        Ctrl->>Service: scanBarcode(auditId, barcode, 1)
+        Service->>SkuRepo: findByBarcode / findByIsbn / findBySkuCode
+        SkuRepo-->>Service: Sku encontrado (ID, Título, SKU)
+        Service->>AuditRepo: audit.scanBarcode(skuId, 1) -> incrementa quantityScanned & recalcula divergência
+    end
+
+    Note over Operador,MoveRepo: 3. Finalização e Conciliação Contábil / Ledger
+    Operador->>Ctrl: POST /api/v1/audits/{id}/finalize
+    Ctrl->>Service: finalizeAudit(auditId)
+    Operador->>Ctrl: POST /api/v1/audits/{id}/reconcile
+    Ctrl->>Service: reconcileAudit(auditId, userId)
+    Service->>StockRepo: Ajusta saldo físico real por SKU (ex: +3 ou -2)
+    Service->>MoveRepo: save(StockMovement: AJUSTE_AUDITORIA com divergência e saldo após)
+    Service->>AuditRepo: save(BlindAudit: CONCILIADA)
+    AuditRepo-->>Ctrl: 200 OK (Auditoria concluída com divergências conciliadas)
 ```
 
 ---
@@ -502,6 +698,20 @@ Após iniciar a aplicação, acesse as interfaces de documentação e observabil
 | `POST` | `/api/v1/products/skus/{skuId}/upload-ebook-url` | `CATALOG_WRITE` | Gerar URL pré-assinada do S3 para upload de arquivo digital |
 | `GET` | `/api/v1/products/skus/{skuId}/download-ebook-url` | Autenticado | Gerar link temporário de download do e-book para cliente autorizado |
 | `POST` | `/api/v1/products/import` | `CATALOG_WRITE` | Upload e importação em streaming de XLSX/CSV com rollback isolado |
+| `POST` | `/api/v1/transfers` | `STOCK_WRITE` | Criar transferência/remessa de estoque para evento ou filial com reserva |
+| `GET` | `/api/v1/transfers` | `STOCK_READ` | Listar transferências de estoque (com filtro opcional por filial) |
+| `GET` | `/api/v1/transfers/{id}` | `STOCK_READ` | Obter detalhes de uma transferência de estoque por ID |
+| `POST` | `/api/v1/transfers/{id}/dispatch` | `STOCK_WRITE` | Despachar transferência de estoque (coloca em trânsito) |
+| `POST` | `/api/v1/transfers/{id}/receive` | `STOCK_WRITE` | Confirmar recebimento com detecção automática de divergência |
+| `GET` | `/api/v1/transfers/{id}/romaneio` | `STOCK_READ` | Gerar Romaneio formal de transporte e carga com pesos cúbicos e fiscais |
+| `POST` | `/api/v1/audits` | `STOCK_WRITE` | Criar conferência cega (bipagem pós-feira ou auditoria física) |
+| `GET` | `/api/v1/audits` | `STOCK_READ` | Listar conferências cegas de uma empresa/stand (`companyId`) |
+| `GET` | `/api/v1/audits/{id}` | `STOCK_READ` | Obter detalhes da conferência cega, itens bipados e divergências |
+| `POST` | `/api/v1/audits/{id}/scan` | `STOCK_WRITE` | Bipar código de barras (EAN-13, ISBN ou SKU) incrementando contagem |
+| `POST` | `/api/v1/audits/{id}/finalize` | `STOCK_WRITE` | Finalizar contagem da conferência cega e fechar período de bipagem |
+| `POST` | `/api/v1/audits/{id}/reconcile` | `STOCK_WRITE` | Conciliar saldos físicos com base nas divergências da conferência no ledger |
+| `GET` | `/api/v1/stock/movements` | `STOCK_READ` | Consultar histórico contábil e imutável de movimentações de estoque (ledger) |
+| `GET` | `/api/v1/events/{companyId}/dashboard` | `STOCK_READ` | Dashboard em tempo real do evento/feira: despachados, faturamento e alertas |
 
 ### 4.2. Exemplos de Requisições via cURL
 
@@ -652,20 +862,21 @@ Plano de ação e cronograma faseado de atividades para o desenvolvimento comple
 
 ---
 
-### Sprint 3: Múltiplos Estoques e Gestão de Eventos / Feiras `[PRÓXIMA ETAPA]`
-- [ ] **Modelagem de Múltiplos Estoques Físicos**:
+### Sprint 3: Múltiplos Estoques e Gestão de Eventos / Feiras `[CONCLUÍDO]`
+- [x] **Modelagem de Múltiplos Estoques Físicos e Ledger Imutável**:
   - Entidades de Estoque segregadas por localidade: Matriz, Balcão de Loja Física, Depósito Central e Eventos/Feiras Acadêmicas.
-  - Movimentações de Transferência de estoque entre unidades com controle de status (`SOLICITADO`, `EM_TRANSITO`, `RECEBIDO`, `DIVERGENCIA`).
-- [ ] **Rotinas de Romaneio de Saída para Eventos**:
-  - Geração de romaneio de remessa para feiras e eventos externos com reserva temporária de estoque e emissão de documentação de transporte.
-- [ ] **Conferência Cega de Retorno (Bipagem)**:
-  - Módulo de conferência cega na volta do evento via leitura de código de barras (bipagem) para apuração imediata de sobras, perdas e conciliação de vendas.
-- [ ] **Dashboard Operacional de Feiras em Tempo Real**:
-  - Endpoints para acompanhamento em tempo real das vendas presenciais, faturamento por stand e saldo remanescente por evento.
+  - Movimentações de Transferência de estoque entre unidades com controle rigoroso de status (`CRIADO`, `RESERVADO`, `EM_TRANSITO`, `RECEBIDO`, `DIVERGENCIA`, `CANCELADO`).
+  - Ledger contábil imutável de movimentações de estoque (`stock_movements`) com rastreamento de tipo de movimentação (`RESERVA`, `TRANSFERENCIA_SAIDA`, `TRANSFERENCIA_ENTRADA`, `AJUSTE_AUDITORIA`), saldo pós-operação, referência de transação e auditoria do operador.
+- [x] **Rotinas de Romaneio de Saída para Eventos**:
+  - Geração de romaneio formal de remessa para feiras e eventos externos com reserva temporária de estoque, apuração de peso cúbico e emissão de documentação de transporte e fiscal (`/api/v1/transfers/{id}/romaneio`).
+- [x] **Conferência Cega de Retorno (Bipagem)**:
+  - Módulo de conferência cega na volta do evento via leitura de código de barras / ISBN (bipagem) para apuração imediata de sobras, perdas e conciliação direta no estoque físico com ajuste contábil automático.
+- [x] **Dashboard Operacional de Feiras em Tempo Real**:
+  - Endpoints para acompanhamento em tempo real das vendas presenciais, faturamento por stand, produtos mais vendidos e alertas de estoque mínimo (`/api/v1/events/{companyId}/dashboard`).
 
 ---
 
-### Sprint 4: PDV Mobile e Venda Balcão / Feira
+### Sprint 4: PDV Mobile e Venda Balcão / Feira `[PRÓXIMA ETAPA]`
 - [ ] **Backend para Suporte a PDV Desacoplado & Modo Offline**:
   - Endpoints ultra-rápidos e leves para sincronização de catálogo, clientes e fila de vendas offline com resolução de conflitos.
 - [ ] **Integração com Leitura Óptica de Código de Barras (Câmera & USB)**:

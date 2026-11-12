@@ -579,6 +579,66 @@ classDiagram
         +String cfop
     }
 
+    class StockTransfer {
+        +UUID id
+        +UUID tenantId
+        +String transferNumber
+        +UUID originCompanyId
+        +UUID destinationCompanyId
+        +TransferStatus status
+        +TransferType transferType
+        +List~StockTransferItem~ items
+        +dispatch(UUID dispatchedBy)
+        +receive(Map quantities, UUID receivedBy)
+        +calculateTotalItems() int
+        +calculateTotalValue() BigDecimal
+    }
+
+    class StockTransferItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +int quantityRequested
+        +int quantityDispatched
+        +int quantityReceived
+        +int getDivergence()
+        +BigDecimal unitPrice
+    }
+
+    class StockMovement {
+        +UUID id
+        +UUID tenantId
+        +UUID companyId
+        +UUID skuId
+        +MovementType movementType
+        +int quantityChange
+        +int balanceAfter
+        +UUID referenceId
+        +String reason
+    }
+
+    class BlindAudit {
+        +UUID id
+        +UUID tenantId
+        +UUID companyId
+        +String code
+        +AuditStatus status
+        +List~BlindAuditItem~ items
+        +scanBarcode(UUID skuId, int count)
+        +finalizeAudit()
+        +reconcile()
+        +getTotalDivergence() int
+    }
+
+    class BlindAuditItem {
+        +UUID id
+        +UUID skuId
+        +int quantityScanned
+        +int quantityExpected
+        +int divergence
+        +incrementScanned(int count)
+    }
+
     Tenant "1" --> "*" Company : possui filiais
     Tenant "1" --> "*" User : possui colaboradores
     Tenant "1" --> "*" Product : cataloga
@@ -587,6 +647,11 @@ classDiagram
     Sku "1" --> "1" Dimensions : medidas frete
     Sku ..> FiscalDecompositionItem : decompõe em
     Sku ..> IsbnValidator : valida
+    Company "1" --> "*" StockTransfer : origem / destino
+    StockTransfer "1" --> "*" StockTransferItem : itens remessa
+    Company "1" --> "*" StockMovement : ledger movimentações
+    Company "1" --> "*" BlindAudit : auditorias de retorno
+    BlindAudit "1" --> "*" BlindAuditItem : contagens bipadas
                 </div>
             </div>
         </section>
@@ -685,6 +750,63 @@ erDiagram
         int quantity
         int reserved_quantity
     }
+
+    stock_transfers {
+        uuid id PK
+        uuid tenant_id FK
+        varchar transfer_number UK
+        uuid origin_company_id FK
+        uuid destination_company_id FK
+        varchar status
+        varchar transfer_type
+        timestamp dispatched_at
+        timestamp received_at
+    }
+
+    stock_transfer_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid transfer_id FK
+        uuid sku_id FK
+        int quantity_requested
+        int quantity_dispatched
+        int quantity_received
+        numeric unit_cost
+        numeric unit_price
+    }
+
+    stock_movements {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid sku_id FK
+        varchar movement_type
+        int quantity_change
+        int balance_after
+        uuid reference_id
+        timestamp created_at
+    }
+
+    blind_audits {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid transfer_id FK
+        varchar code UK
+        varchar status
+        uuid auditor_id
+        timestamp completed_at
+    }
+
+    blind_audit_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid audit_id FK
+        uuid sku_id FK
+        int quantity_scanned
+        int quantity_expected
+        int divergence
+    }
                 </div>
             </div>
         </section>
@@ -700,6 +822,8 @@ erDiagram
                 <button class="tab-btn" onclick="switchTab('seq-fiscal', this)">4. Rateio Fiscal de Combo</button>
                 <button class="tab-btn" onclick="switchTab('seq-import', this)">5. Importação em Lote</button>
                 <button class="tab-btn" onclick="switchTab('seq-s3', this)">6. S3 Presigned URLs</button>
+                <button class="tab-btn" onclick="switchTab('seq-transfer', this)">7. Transferência & Romaneio</button>
+                <button class="tab-btn" onclick="switchTab('seq-audit', this)">8. Conferência Cega & Ledger</button>
             </div>
 
             <!-- Tab 1: Tenancy -->
@@ -875,6 +999,90 @@ sequenceDiagram
     Storage-->>Backend: URL assinada temporária
     Backend-->>User: Retorna link temporário para download
     User->>S3: GET [downloadUrl] (Baixa arquivo EPUB/PDF)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 7: Transfer & Romaneio -->
+            <div id="seq-transfer" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Remessa de Estoque para Feira/Evento, Reserva, Despacho e Emissão de Romaneio de Carga:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Gestor as Gestor de Operações
+    participant Ctrl as EventStockController
+    participant Service as EventStockService
+    participant StockRepo as StockRepositoryPort
+    participant MoveRepo as StockMovementRepositoryPort
+    participant TransferRepo as StockTransferRepositoryPort
+
+    Note over Gestor,TransferRepo: 1. Criação da Transferência e Reserva Temporária de Estoque
+    Gestor->>Ctrl: POST /api/v1/transfers (Origem: Matriz, Destino: Feira Bienal, Itens: [SKU-1: 50 un])
+    Ctrl->>Service: createTransfer(request, userId)
+    Service->>StockRepo: getAvailableStock(Matriz, SKU-1)
+    StockRepo-->>Service: Saldo disponível = 120 un (OK >= 50)
+    Service->>StockRepo: reserveStock(Matriz, SKU-1, 50)
+    Service->>MoveRepo: save(StockMovement: RESERVA, -50 un, ref: transferId)
+    Service->>TransferRepo: save(Transfer: RESERVADO)
+    TransferRepo-->>Ctrl: 201 Created (TRF-2026-001)
+
+    Note over Gestor,TransferRepo: 2. Despacho e Saída Física de Estoque
+    Gestor->>Ctrl: POST /api/v1/transfers/{id}/dispatch
+    Ctrl->>Service: dispatchTransfer(transferId, userId)
+    Service->>StockRepo: transferStock (Dedução física na Matriz)
+    Service->>MoveRepo: save(StockMovement: TRANSFERENCIA_SAIDA, -50 un)
+    Service->>TransferRepo: save(Transfer: EM_TRANSITO)
+    TransferRepo-->>Ctrl: 200 OK (Status: EM_TRANSITO)
+
+    Note over Gestor,TransferRepo: 3. Geração do Romaneio de Transporte
+    Gestor->>Ctrl: GET /api/v1/transfers/{id}/romaneio
+    Ctrl->>Service: generateRomaneio(transferId)
+    Service-->>Ctrl: RomaneioDocumentResponse (Peso Cúbico: 25.000g, R$ 2.450,00, Dados Fiscais de Origem e Destino)
+    Ctrl-->>Gestor: 200 OK (Documento gerado para transporte)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 8: Blind Audit & Ledger -->
+            <div id="seq-audit" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Conferência Cega de Retorno (Bipagem de Código de Barras / ISBN) e Conciliação no Ledger:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Operador as Operador de Conferência (Logística)
+    participant Ctrl as EventStockController
+    participant Service as EventStockService
+    participant SkuRepo as SpringDataSkuRepository
+    participant AuditRepo as BlindAuditRepositoryPort
+    participant StockRepo as StockRepositoryPort
+    participant MoveRepo as StockMovementRepositoryPort
+
+    Note over Operador,MoveRepo: 1. Abertura da Conferência Cega vinculada à Remessa
+    Operador->>Ctrl: POST /api/v1/audits (companyId: Feira, transferId: TRF-001)
+    Ctrl->>Service: createBlindAudit(request)
+    Service->>AuditRepo: save(BlindAudit: ABERTA, expectedQuantities do Romaneio)
+    AuditRepo-->>Ctrl: 201 Created (AUD-100)
+
+    Note over Operador,MoveRepo: 2. Bipagem Rápida de Códigos de Barras / ISBNs
+    loop Para cada exemplar físico desembalado
+        Operador->>Ctrl: POST /api/v1/audits/{id}/scan (barcode: "9788535902778", qty: 1)
+        Ctrl->>Service: scanBarcode(auditId, barcode, 1)
+        Service->>SkuRepo: findByBarcode / findByIsbn / findBySkuCode
+        SkuRepo-->>Service: Sku encontrado (ID, Título, SKU)
+        Service->>AuditRepo: audit.scanBarcode(skuId, 1) -> incrementa quantityScanned & recalcula divergência
+    end
+
+    Note over Operador,MoveRepo: 3. Finalização e Conciliação Contábil / Ledger
+    Operador->>Ctrl: POST /api/v1/audits/{id}/finalize
+    Ctrl->>Service: finalizeAudit(auditId)
+    Operador->>Ctrl: POST /api/v1/audits/{id}/reconcile
+    Ctrl->>Service: reconcileAudit(auditId, userId)
+    Service->>StockRepo: Ajusta saldo físico real por SKU (ex: +3 ou -2)
+    Service->>MoveRepo: save(StockMovement: AJUSTE_AUDITORIA com divergência e saldo após)
+    Service->>AuditRepo: save(BlindAudit: CONCILIADA)
+    AuditRepo-->>Ctrl: 200 OK (Auditoria concluída com divergências conciliadas)
                     </div>
                 </div>
             </div>
@@ -1164,6 +1372,91 @@ sequenceDiagram
                             <td><span class="badge-auth">CATALOG_WRITE</span></td>
                             <td>Upload de arquivo XLSX ou CSV para importação em streaming (chunks de 500) com rollback isolado.</td>
                         </tr>
+                        <!-- Múltiplos Estoques, Transferências, Feiras & Auditoria Cega -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/transfers</td>
+                            <td><span class="badge-auth">STOCK_WRITE</span></td>
+                            <td>Criar transferência/remessa de estoque para filial ou evento externo com reserva temporária.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/transfers</td>
+                            <td><span class="badge-auth">STOCK_READ</span></td>
+                            <td>Listar transferências de estoque (com filtro opcional por <code>companyId</code>).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/transfers/{id}</td>
+                            <td><span class="badge-auth">STOCK_READ</span></td>
+                            <td>Obter detalhes completos de uma transferência de estoque por UUID.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/transfers/{id}/dispatch</td>
+                            <td><span class="badge-auth">STOCK_WRITE</span></td>
+                            <td>Despachar transferência de estoque (coloca em trânsito e deduz físico de origem).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/transfers/{id}/receive</td>
+                            <td><span class="badge-auth">STOCK_WRITE</span></td>
+                            <td>Confirmar recebimento de carga com detecção automática de divergências e entrada física no destino.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/transfers/{id}/romaneio</td>
+                            <td><span class="badge-auth">STOCK_READ</span></td>
+                            <td>Gerar Romaneio formal de transporte e carga com pesos cúbicos, dados fiscais e totalizadores.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/audits</td>
+                            <td><span class="badge-auth">STOCK_WRITE</span></td>
+                            <td>Criar nova conferência cega (bipagem pós-feira ou auditoria física de estoque).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/audits</td>
+                            <td><span class="badge-auth">STOCK_READ</span></td>
+                            <td>Listar conferências cegas de uma empresa/stand (parâmetro obrigatório <code>companyId</code>).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/audits/{id}</td>
+                            <td><span class="badge-auth">STOCK_READ</span></td>
+                            <td>Obter detalhes da conferência cega, itens bipados e divergências calculadas.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/audits/{id}/scan</td>
+                            <td><span class="badge-auth">STOCK_WRITE</span></td>
+                            <td>Bipar código de barras (EAN-13, ISBN-10, ISBN-13 ou SKU) incrementando contagem auditada.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/audits/{id}/finalize</td>
+                            <td><span class="badge-auth">STOCK_WRITE</span></td>
+                            <td>Finalizar contagem da conferência cega e fechar período de bipagem.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/audits/{id}/reconcile</td>
+                            <td><span class="badge-auth">STOCK_WRITE</span></td>
+                            <td>Conciliar saldos de estoque reais com base nas divergências da conferência cega gerando movimentações no ledger.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/stock/movements</td>
+                            <td><span class="badge-auth">STOCK_READ</span></td>
+                            <td>Consultar histórico contábil e imutável de movimentações de estoque (ledger audit trail).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/events/{companyId}/dashboard</td>
+                            <td><span class="badge-auth">STOCK_READ</span></td>
+                            <td>Dashboard operacional de feira/evento: itens despachados, faturamento, estoque real e alertas.</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -1178,6 +1471,9 @@ sequenceDiagram
                 <li><strong>Disponibilidade Virtual de Kits Dinâmicos:</strong> O estoque de um combo não é fixo; ele reflete em tempo real o gargalo de seus componentes unitários (<code>disponibilidade = min(saldo_item / qtd_necessaria)</code>).</li>
                 <li><strong>Reconciliação Centesimal Fiscal:</strong> O faturamento de kits não pode sofrer distorções de dízimas periódicas. O motor acumula os centavos rateados e equaliza o arredondamento na última linha do combo, garantindo paridade exata com o valor total faturado no documento fiscal.</li>
                 <li><strong>Tolerância a Falhas na Importação:</strong> Uma inconsistência em uma linha de planilha não invalida o arquivo todo. Chunks de 500 registros isolam transações individualmente, registrando logs detalhados de erros enquanto processam o restante do catálogo.</li>
+                <li><strong>Reserva Temporária para Remessas de Eventos:</strong> Ao criar uma transferência para feira ou evento acadêmico, o estoque disponível na filial de origem é imediatamente reservado (<code>RESERVADO</code>), impedindo faturamento duplo e cancelamentos involuntários na matriz.</li>
+                <li><strong>Emissão de Romaneio com Peso Cúbico e Fiscal:</strong> O romaneio de carga agrupa códigos SKU, ISBNs, títulos, quantidades, pesos unitários em gramas e totais monetários para respaldo no transporte rodoviário e conferência na montagem do stand.</li>
+                <li><strong>Conferência Cega de Retorno com Bipagem e Ledger Imutável:</strong> Na volta da feira, o operador efetua a bipagem sem visualização prévia da quantidade remanescente esperada (evitando vícios de contagem). Divergências apuradas geram conciliação automática no estoque e registro permanente na trilha de auditoria contábil (<code>stock_movements</code>).</li>
             </ul>
         </section>
 

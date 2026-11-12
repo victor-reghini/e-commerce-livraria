@@ -489,6 +489,20 @@ sequenceDiagram
 | **POST** | `/api/v1/products/skus/{skuId}/upload-ebook-url`| `CATALOG_WRITE`| Gerar presigned URL no S3 para upload de e-book |
 | **GET** | `/api/v1/products/skus/{skuId}/download-ebook-url`| Autenticado | Link temporário de 15 minutos para download de e-book |
 | **POST** | `/api/v1/products/import` | `CATALOG_WRITE`| Importação em streaming de XLSX/CSV com rollback isolado |
+| **POST** | `/api/v1/transfers` | `STOCK_WRITE`| Criar transferência/remessa de estoque para evento ou filial |
+| **GET** | `/api/v1/transfers` | `STOCK_READ` | Listar transferências de estoque (com filtro por filial) |
+| **GET** | `/api/v1/transfers/{id}` | `STOCK_READ` | Obter detalhes de transferência por ID |
+| **POST** | `/api/v1/transfers/{id}/dispatch`| `STOCK_WRITE`| Despachar transferência (status EM_TRANSITO) |
+| **POST** | `/api/v1/transfers/{id}/receive` | `STOCK_WRITE`| Confirmar recebimento com detecção de divergências |
+| **GET** | `/api/v1/transfers/{id}/romaneio`| `STOCK_READ` | Gerar Romaneio formal de transporte e carga |
+| **POST** | `/api/v1/audits` | `STOCK_WRITE`| Criar conferência cega (bipagem pós-evento) |
+| **GET** | `/api/v1/audits` | `STOCK_READ` | Listar conferências cegas de uma empresa/stand |
+| **GET** | `/api/v1/audits/{id}` | `STOCK_READ` | Obter detalhes da conferência cega |
+| **POST** | `/api/v1/audits/{id}/scan` | `STOCK_WRITE`| Bipar código de barras (EAN-13, ISBN ou SKU) |
+| **POST** | `/api/v1/audits/{id}/finalize` | `STOCK_WRITE`| Finalizar contagem da conferência cega |
+| **POST** | `/api/v1/audits/{id}/reconcile`| `STOCK_WRITE`| Conciliar saldos físicos no estoque e ledger contábil |
+| **GET** | `/api/v1/stock/movements` | `STOCK_READ` | Histórico contábil e imutável de estoque (ledger) |
+| **GET** | `/api/v1/events/{companyId}/dashboard`| `STOCK_READ` | Dashboard em tempo real de evento/feira |
 
 ---
 
