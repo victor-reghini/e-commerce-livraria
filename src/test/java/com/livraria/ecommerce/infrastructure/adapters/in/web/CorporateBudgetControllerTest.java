@@ -3,7 +3,6 @@ package com.livraria.ecommerce.infrastructure.adapters.in.web;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.livraria.ecommerce.application.dto.ecommerce.CorporateBudgetDto;
-import com.livraria.ecommerce.domain.model.ecommerce.BudgetStatus;
 import com.livraria.ecommerce.domain.model.ecommerce.CorporateBudget;
 import com.livraria.ecommerce.domain.model.ecommerce.CorporateBudgetItem;
 import com.livraria.ecommerce.domain.port.in.CorporateBudgetUseCase;

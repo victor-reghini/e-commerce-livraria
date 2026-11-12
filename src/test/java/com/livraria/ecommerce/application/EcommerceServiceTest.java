@@ -3,8 +3,6 @@ package com.livraria.ecommerce.application;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.livraria.ecommerce.application.dto.ecommerce.EcommerceDto;
 import com.livraria.ecommerce.application.service.EcommerceService;
-import com.livraria.ecommerce.domain.exception.BusinessException;
-import com.livraria.ecommerce.domain.model.company.TaxRegime;
 import com.livraria.ecommerce.domain.model.ecommerce.Cart;
 import com.livraria.ecommerce.domain.model.ecommerce.EcommercePaymentMethod;
 import com.livraria.ecommerce.domain.model.ecommerce.Order;
@@ -37,21 +35,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 

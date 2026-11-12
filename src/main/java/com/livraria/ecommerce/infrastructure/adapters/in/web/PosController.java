@@ -1,12 +1,9 @@
 package com.livraria.ecommerce.infrastructure.adapters.in.web;
 
 import com.livraria.ecommerce.application.dto.pos.PosDto;
-import com.livraria.ecommerce.domain.model.pos.CashMovement;
 import com.livraria.ecommerce.domain.model.pos.CashShift;
 import com.livraria.ecommerce.domain.model.pos.PaymentMethod;
 import com.livraria.ecommerce.domain.model.pos.PosSale;
-import com.livraria.ecommerce.domain.model.pos.PosSaleItem;
-import com.livraria.ecommerce.domain.model.pos.PosSalePayment;
 import com.livraria.ecommerce.domain.port.in.PosUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

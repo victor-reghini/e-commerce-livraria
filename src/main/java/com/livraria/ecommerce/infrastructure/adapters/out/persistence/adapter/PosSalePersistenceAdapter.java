@@ -10,7 +10,6 @@ import com.livraria.ecommerce.domain.port.out.PosSaleRepositoryPort;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.PosSaleItemJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.PosSaleJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.PosSalePaymentJpaEntity;
-import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.ProductJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.SkuJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.repository.SpringDataPosSaleItemRepository;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.repository.SpringDataPosSalePaymentRepository;

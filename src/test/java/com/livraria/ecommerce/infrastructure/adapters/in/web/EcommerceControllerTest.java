@@ -7,7 +7,6 @@ import com.livraria.ecommerce.domain.model.ecommerce.Cart;
 import com.livraria.ecommerce.domain.model.ecommerce.EcommercePaymentMethod;
 import com.livraria.ecommerce.domain.model.ecommerce.Order;
 import com.livraria.ecommerce.domain.model.ecommerce.OrderItem;
-import com.livraria.ecommerce.domain.model.ecommerce.OrderStatus;
 import com.livraria.ecommerce.domain.model.ecommerce.ShippingAddress;
 import com.livraria.ecommerce.domain.model.ecommerce.ShippingCarrier;
 import com.livraria.ecommerce.domain.model.ecommerce.ShippingQuote;

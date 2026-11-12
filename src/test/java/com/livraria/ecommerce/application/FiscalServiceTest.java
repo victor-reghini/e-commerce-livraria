@@ -2,7 +2,6 @@ package com.livraria.ecommerce.application;
 
 import com.livraria.ecommerce.application.service.FiscalService;
 import com.livraria.ecommerce.application.service.ObservabilityMetricsService;
-import com.livraria.ecommerce.domain.exception.BusinessException;
 import com.livraria.ecommerce.domain.model.company.Address;
 import com.livraria.ecommerce.domain.model.company.Company;
 import com.livraria.ecommerce.domain.model.ecommerce.Order;

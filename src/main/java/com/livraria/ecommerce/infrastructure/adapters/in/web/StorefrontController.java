@@ -2,7 +2,6 @@ package com.livraria.ecommerce.infrastructure.adapters.in.web;
 
 import com.livraria.ecommerce.application.dto.catalog.CatalogDto;
 import com.livraria.ecommerce.domain.model.catalog.Product;
-import com.livraria.ecommerce.domain.model.catalog.Sku;
 import com.livraria.ecommerce.domain.port.in.CatalogUseCase;
 import com.livraria.ecommerce.domain.port.out.StockRepositoryPort;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.CompanyJpaEntity;
@@ -18,9 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @RestController

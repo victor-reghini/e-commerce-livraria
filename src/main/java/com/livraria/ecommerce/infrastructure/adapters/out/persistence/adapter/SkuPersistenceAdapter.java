@@ -12,7 +12,6 @@ import com.livraria.ecommerce.domain.model.catalog.Sku;
 import com.livraria.ecommerce.domain.port.out.SkuRepositoryPort;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.BundleItemJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.EbookMetadataJpaEntity;
-import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.ProductImageJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.SkuJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.repository.SpringDataBundleItemRepository;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.repository.SpringDataEbookMetadataRepository;

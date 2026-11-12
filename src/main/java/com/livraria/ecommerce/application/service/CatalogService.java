@@ -13,7 +13,6 @@ import com.livraria.ecommerce.domain.model.catalog.FiscalDecompositionItem;
 import com.livraria.ecommerce.domain.model.catalog.IsbnValidator;
 import com.livraria.ecommerce.domain.model.catalog.Product;
 import com.livraria.ecommerce.domain.model.catalog.ProductAuthor;
-import com.livraria.ecommerce.domain.model.catalog.ProductType;
 import com.livraria.ecommerce.domain.model.catalog.Publisher;
 import com.livraria.ecommerce.domain.model.catalog.Sku;
 import com.livraria.ecommerce.domain.port.in.CatalogUseCase;

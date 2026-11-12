@@ -3,7 +3,6 @@ package com.livraria.ecommerce.domain.model.permission;
 import com.livraria.ecommerce.domain.model.user.UserRole;
 
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 

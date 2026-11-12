@@ -2,11 +2,9 @@ package com.livraria.ecommerce.infrastructure.adapters.in.web;
 
 import com.livraria.ecommerce.application.dto.stock.EventStockDto;
 import com.livraria.ecommerce.domain.model.stock.BlindAudit;
-import com.livraria.ecommerce.domain.model.stock.BlindAuditItem;
 import com.livraria.ecommerce.domain.model.stock.EventDashboard;
 import com.livraria.ecommerce.domain.model.stock.StockMovement;
 import com.livraria.ecommerce.domain.model.stock.StockTransfer;
-import com.livraria.ecommerce.domain.model.stock.StockTransferItem;
 import com.livraria.ecommerce.domain.port.in.EventStockUseCase;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

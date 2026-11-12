@@ -2,7 +2,6 @@ package com.livraria.ecommerce.application;
 
 import com.livraria.ecommerce.application.dto.pos.PosDto;
 import com.livraria.ecommerce.application.service.PosService;
-import com.livraria.ecommerce.domain.exception.BusinessException;
 import com.livraria.ecommerce.domain.model.pos.CashShift;
 import com.livraria.ecommerce.domain.model.pos.PaymentMethod;
 import com.livraria.ecommerce.domain.model.pos.PosSale;
@@ -42,7 +41,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)

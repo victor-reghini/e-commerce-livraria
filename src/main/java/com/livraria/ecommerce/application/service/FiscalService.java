@@ -9,7 +9,6 @@ import com.livraria.ecommerce.domain.model.ecommerce.OrderItem;
 import com.livraria.ecommerce.domain.model.ecommerce.OrderStatus;
 import com.livraria.ecommerce.domain.model.fiscal.FiscalCancellationResult;
 import com.livraria.ecommerce.domain.model.fiscal.FiscalInvoice;
-import com.livraria.ecommerce.domain.model.fiscal.FiscalModel;
 import com.livraria.ecommerce.domain.model.fiscal.FiscalStatus;
 import com.livraria.ecommerce.domain.model.fiscal.SefazAuthResult;
 import com.livraria.ecommerce.domain.model.fiscal.SefazStatusResult;

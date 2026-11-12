@@ -7,7 +7,6 @@ import com.livraria.ecommerce.domain.port.out.BlindAuditRepositoryPort;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.BlindAuditItemJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.BlindAuditJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.CompanyJpaEntity;
-import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.ProductJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.SkuJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.repository.SpringDataBlindAuditItemRepository;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.repository.SpringDataBlindAuditRepository;

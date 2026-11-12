@@ -1,10 +1,7 @@
 package com.livraria.ecommerce.infrastructure.adapters.in.web;
 
 import com.livraria.ecommerce.application.dto.ecommerce.CorporateBudgetDto;
-import com.livraria.ecommerce.application.dto.ecommerce.EcommerceDto;
 import com.livraria.ecommerce.domain.model.ecommerce.CorporateBudget;
-import com.livraria.ecommerce.domain.model.ecommerce.CorporateBudgetItem;
-import com.livraria.ecommerce.domain.model.ecommerce.Order;
 import com.livraria.ecommerce.domain.port.in.CorporateBudgetUseCase;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.tenancy.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;

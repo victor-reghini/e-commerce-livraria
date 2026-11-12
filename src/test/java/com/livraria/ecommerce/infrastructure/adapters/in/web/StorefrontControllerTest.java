@@ -1,6 +1,5 @@
 package com.livraria.ecommerce.infrastructure.adapters.in.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.livraria.ecommerce.domain.model.catalog.Product;
 import com.livraria.ecommerce.domain.model.catalog.ProductType;
 import com.livraria.ecommerce.domain.port.in.CatalogUseCase;

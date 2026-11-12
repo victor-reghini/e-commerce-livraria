@@ -6,7 +6,6 @@ import com.livraria.ecommerce.application.dto.ecommerce.EcommerceDto;
 import com.livraria.ecommerce.domain.exception.BusinessException;
 import com.livraria.ecommerce.domain.model.ecommerce.Cart;
 import com.livraria.ecommerce.domain.model.ecommerce.CartItem;
-import com.livraria.ecommerce.domain.model.ecommerce.EcommercePaymentMethod;
 import com.livraria.ecommerce.domain.model.ecommerce.Order;
 import com.livraria.ecommerce.domain.model.ecommerce.OrderItem;
 import com.livraria.ecommerce.domain.model.ecommerce.OrderPayment;

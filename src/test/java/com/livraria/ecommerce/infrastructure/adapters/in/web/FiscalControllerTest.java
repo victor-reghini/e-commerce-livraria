@@ -3,8 +3,6 @@ package com.livraria.ecommerce.infrastructure.adapters.in.web;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.livraria.ecommerce.application.dto.fiscal.FiscalDto;
 import com.livraria.ecommerce.domain.model.fiscal.FiscalInvoice;
-import com.livraria.ecommerce.domain.model.fiscal.FiscalModel;
-import com.livraria.ecommerce.domain.model.fiscal.FiscalStatus;
 import com.livraria.ecommerce.domain.model.fiscal.SefazStatusResult;
 import com.livraria.ecommerce.domain.port.in.FiscalUseCase;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,10 +16,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;

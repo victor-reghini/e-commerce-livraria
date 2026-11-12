@@ -1,6 +1,5 @@
 package com.livraria.ecommerce.infrastructure.adapters.out.payment;
 
-import com.livraria.ecommerce.domain.model.ecommerce.EcommercePaymentMethod;
 import com.livraria.ecommerce.domain.model.ecommerce.PaymentStatus;
 import com.livraria.ecommerce.domain.model.ecommerce.PaymentTransactionResult;
 import com.livraria.ecommerce.domain.port.out.PagarmeGatewayPort;
@@ -9,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.util.UUID;
 

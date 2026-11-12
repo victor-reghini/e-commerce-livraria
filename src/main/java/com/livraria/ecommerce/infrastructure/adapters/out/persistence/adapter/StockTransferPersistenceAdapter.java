@@ -6,7 +6,6 @@ import com.livraria.ecommerce.domain.model.stock.TransferStatus;
 import com.livraria.ecommerce.domain.model.stock.TransferType;
 import com.livraria.ecommerce.domain.port.out.StockTransferRepositoryPort;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.CompanyJpaEntity;
-import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.ProductJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.SkuJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.StockTransferItemJpaEntity;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.StockTransferJpaEntity;

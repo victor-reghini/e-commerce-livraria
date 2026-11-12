@@ -1,7 +1,6 @@
 package com.livraria.ecommerce.infrastructure.adapters.in.web;
 
 import com.livraria.ecommerce.application.dto.catalog.CatalogDto;
-import com.livraria.ecommerce.domain.model.catalog.BundleItem;
 import com.livraria.ecommerce.domain.model.catalog.FiscalDecompositionItem;
 import com.livraria.ecommerce.domain.model.catalog.Product;
 import com.livraria.ecommerce.domain.model.catalog.Sku;
@@ -29,7 +28,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 

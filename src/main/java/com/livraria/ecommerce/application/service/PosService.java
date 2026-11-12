@@ -6,7 +6,6 @@ import com.livraria.ecommerce.domain.exception.EntityNotFoundException;
 import com.livraria.ecommerce.domain.model.pos.CashShift;
 import com.livraria.ecommerce.domain.model.pos.NfceGenerator;
 import com.livraria.ecommerce.domain.model.pos.NfceStatus;
-import com.livraria.ecommerce.domain.model.pos.PaymentMethod;
 import com.livraria.ecommerce.domain.model.pos.PosSale;
 import com.livraria.ecommerce.domain.model.pos.PosSaleItem;
 import com.livraria.ecommerce.domain.model.pos.PosSalePayment;
