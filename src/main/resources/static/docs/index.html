@@ -697,9 +697,116 @@ classDiagram
         +BigDecimal amount
     }
 
+    class Cart {
+        +UUID id
+        +UUID tenantId
+        +String sessionId
+        +UUID customerId
+        +List~CartItem~ items
+        +addItem(UUID skuId, int qty, BigDecimal price)
+        +updateItemQuantity(UUID skuId, int qty)
+        +removeItem(UUID skuId)
+        +clear()
+        +calculateSubtotal() BigDecimal
+        +calculateTotalItems() int
+    }
+
+    class CartItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +String productTitle
+        +int quantity
+        +BigDecimal unitPrice
+        +getTotal() BigDecimal
+    }
+
+    class Order {
+        +UUID id
+        +UUID tenantId
+        +String orderNumber
+        +OrderStatus status
+        +BigDecimal subtotal
+        +BigDecimal discount
+        +BigDecimal shippingAmount
+        +BigDecimal totalAmount
+        +ShippingCarrier shippingCarrier
+        +ShippingService shippingService
+        +String trackingCode
+        +ShippingAddress shippingAddress
+        +List~OrderItem~ items
+        +List~OrderPayment~ payments
+        +markAsPaid(String transactionId)
+        +markAsInvoiced(LocalDate dueDate)
+        +ship(String trackingCode, String trackingUrl)
+        +deliver()
+        +cancel(String reason)
+    }
+
+    class OrderItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +String productTitle
+        +int quantity
+        +BigDecimal unitPrice
+        +BigDecimal discount
+        +BigDecimal total
+    }
+
+    class OrderPayment {
+        +UUID id
+        +EcommercePaymentMethod paymentMethod
+        +PaymentGateway gateway
+        +String gatewayTransactionId
+        +PaymentStatus status
+        +BigDecimal amount
+        +int installments
+        +String pixQrCode
+        +String pixCopiaCola
+        +String boletoBarcode
+        +String boletoUrl
+        +LocalDate boletoDueDate
+        +markAsPaid(String transactionId)
+    }
+
+    class CorporateBudget {
+        +UUID id
+        +UUID tenantId
+        +String budgetNumber
+        +String corporateName
+        +String cnpj
+        +BudgetStatus status
+        +BigDecimal totalAmount
+        +int paymentTermsDays
+        +LocalDate dueDate
+        +submitForApproval()
+        +approve(boolean hasOverdueInvoices)
+        +reject(String reason)
+        +markAsInvoiced(UUID orderId)
+    }
+
+    class CorporateBudgetItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +String productTitle
+        +int quantity
+        +BigDecimal unitPrice
+        +BigDecimal total
+    }
+
     Tenant "1" --> "*" Company : possui filiais
     Tenant "1" --> "*" User : possui colaboradores
     Tenant "1" --> "*" Product : cataloga
+    Tenant "1" --> "*" Cart : carrinhos
+    Tenant "1" --> "*" Order : pedidos e-commerce
+    Tenant "1" --> "*" CorporateBudget : orçamentos institucionais
+    Cart "1" --> "*" CartItem : itens do carrinho
+    Order "1" --> "*" OrderItem : itens faturados
+    Order "1" --> "*" OrderPayment : parcelas e gateways
+    CorporateBudget "1" --> "*" CorporateBudgetItem : itens orçados
+    CorporateBudget ..> Order : faturado em
     Product "1" --> "*" Sku : variações
     Sku "1" --> "*" BundleItem : itens compostos
     Sku "1" --> "1" Dimensions : medidas frete
@@ -933,6 +1040,108 @@ erDiagram
         varchar payment_method
         numeric amount
     }
+
+    tenants ||--o{ carts : "RLS protegido"
+    carts ||--o{ cart_items : "contem"
+    tenants ||--o{ orders : "RLS protegido"
+    orders ||--o{ order_items : "contem"
+    orders ||--o{ order_payments : "transacoes"
+    tenants ||--o{ corporate_budgets : "RLS protegido"
+    corporate_budgets ||--o{ corporate_budget_items : "itens orcamento"
+    corporate_budgets ||--o| orders : "gera fatura a prazo"
+    tenants ||--o{ processed_webhooks : "idempotencia estrita"
+
+    carts {
+        uuid id PK
+        uuid tenant_id FK
+        varchar session_id
+        uuid customer_id FK
+        timestamp created_at
+    }
+
+    cart_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid cart_id FK
+        uuid sku_id FK
+        int quantity
+        numeric unit_price
+    }
+
+    orders {
+        uuid id PK
+        uuid tenant_id FK
+        varchar order_number UK
+        varchar status
+        numeric subtotal
+        numeric discount
+        numeric shipping_amount
+        numeric total_amount
+        varchar shipping_carrier
+        varchar tracking_code
+        timestamp paid_at
+        timestamp shipped_at
+        timestamp delivered_at
+    }
+
+    order_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid order_id FK
+        uuid sku_id FK
+        varchar sku_code
+        varchar product_title
+        int quantity
+        numeric unit_price
+        numeric total
+    }
+
+    order_payments {
+        uuid id PK
+        uuid tenant_id FK
+        uuid order_id FK
+        varchar payment_method
+        varchar gateway
+        varchar gateway_transaction_id
+        varchar status
+        numeric amount
+        text pix_copia_cola
+        varchar boleto_barcode
+        date boleto_due_date
+    }
+
+    corporate_budgets {
+        uuid id PK
+        uuid tenant_id FK
+        varchar budget_number UK
+        varchar corporate_name
+        varchar cnpj
+        varchar status
+        numeric total_amount
+        int payment_terms_days
+        date due_date
+        uuid invoiced_order_id FK
+    }
+
+    corporate_budget_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid budget_id FK
+        uuid sku_id FK
+        int quantity
+        numeric unit_price
+        numeric total
+    }
+
+    processed_webhooks {
+        uuid id PK
+        uuid tenant_id FK
+        varchar gateway
+        varchar event_id UK
+        varchar event_type
+        varchar status
+        timestamp processed_at
+    }
                 </div>
             </div>
         </section>
@@ -953,6 +1162,8 @@ erDiagram
                 <button class="tab-btn" onclick="switchTab('seq-cash-shift', this)">9. Turno & Fechamento de Caixa</button>
                 <button class="tab-btn" onclick="switchTab('seq-pos-sale', this)">10. Venda Balcão & NFC-e</button>
                 <button class="tab-btn" onclick="switchTab('seq-offline-sync', this)">11. PDV Offline & Idempotência</button>
+                <button class="tab-btn" onclick="switchTab('seq-checkout', this)">12. Checkout & Pagar.me V5</button>
+                <button class="tab-btn" onclick="switchTab('seq-budget', this)">13. Venda a Prazo & Trava Inadimplência</button>
             </div>
 
             <!-- Tab 1: Tenancy -->
@@ -1321,6 +1532,92 @@ sequenceDiagram
     end
     Service-->>Ctrl: OfflineBatchSyncResult (total: 10, processadas: 10, duplicadas: 0)
     Ctrl-->>PDV: 200 OK (Sincronização concluída com sucesso)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 12: Checkout & Pagar.me V5 -->
+            <div id="seq-checkout" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Fluxo de Checkout Transparente (PIX / Cartão / Boleto) e Webhook Assíncrono com Idempotência Estrita:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Cliente as Cliente Loja Virtual
+    participant Ctrl as EcommerceController
+    participant Service as EcommerceService
+    participant Gateway as PagarmeGatewayAdapter (API V5)
+    participant DB as PostgreSQL (RLS)
+    participant HookCtrl as PaymentWebhookController
+    participant Queue as RabbitMQ (order.exchange)
+
+    Note over Cliente,DB: 1. Checkout Transparente e Reserva de Estoque
+    Cliente->>Ctrl: POST /api/v1/ecommerce/checkout (Itens, Frete, Pagamento PIX/Cartão)
+    Ctrl->>Service: checkout(tenantId, request)
+    Service->>DB: Valida estoque e reserva unidades temporariamente
+    Service->>Gateway: Cria pedido/cobrança no Pagar.me v5
+    Gateway-->>Service: Retorna QR Code PIX, Linha Digitável ou Token Aprovado
+    Service->>DB: Salva Order (AGUARDANDO_PAGAMENTO) e OrderPayment
+    Service-->>Ctrl: OrderResponse {orderNumber, pixQrCode, copiaCola}
+    Ctrl-->>Cliente: 201 Created (Exibe QR Code na tela)
+
+    Note over HookCtrl,Queue: 2. Webhook Assíncrono de Pagamento e Idempotência
+    Gateway->>HookCtrl: POST /api/v1/webhooks/pagarme {event: "order.paid", id: "evt_123"}
+    HookCtrl->>Service: processPagarmeWebhook(tenantId, eventId, payload)
+    Service->>DB: Consulta processed_webhooks (evt_123)
+    alt Webhook Já Processado Anteriormente
+        Service-->>HookCtrl: Ignora com idempotência (200 OK)
+    else Primeiro Recebimento do Webhook
+        Service->>DB: Atualiza Order para PAGO e debita estoque real (VENDA_ECOMMERCE)
+        Service->>DB: Registra evento na tabela processed_webhooks
+        Service->>Queue: Publica mensagem na fila order.payment.approved para emissão de NF-e
+        Service-->>HookCtrl: 200 OK (Sucesso)
+    end
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 13: Venda a Prazo & Trava de Inadimplência -->
+            <div id="seq-budget" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Fluxo de Orçamento Corporativo, Aprovação com Trava de Inadimplência e Faturamento a Prazo:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor ClientePJ as Cliente Institucional (Escola/Universidade)
+    actor Gestor as Gestor Comercial da Livraria
+    participant Ctrl as CorporateBudgetController
+    participant Service as CorporateBudgetService
+    participant OrderRepo as OrderRepositoryPort (RLS)
+    participant DB as PostgreSQL (RLS)
+
+    Note over ClientePJ,DB: 1. Solicitação e Criação do Orçamento
+    ClientePJ->>Ctrl: POST /api/v1/budgets (CNPJ, Itens, Prazo: 30 dias)
+    Ctrl->>Service: createBudget(tenantId, request)
+    Service->>DB: Salva CorporateBudget (Status: RASCUNHO)
+    Ctrl-->>ClientePJ: 201 Created (ORC-20261112-001)
+
+    Note over Gestor,OrderRepo: 2. Avaliação de Crédito & Trava de Inadimplência
+    Gestor->>Ctrl: POST /api/v1/budgets/{id}/approve
+    Ctrl->>Service: approveBudget(tenantId, budgetId)
+    Service->>OrderRepo: hasOverdueInvoices(tenantId, budget.cnpj)
+    alt Cliente Inadimplente (Possui boletos/pedidos faturados vencidos)
+        OrderRepo-->>Service: Retorna TRUE
+        Service-->>Ctrl: Lança BusinessException ("Trava de Inadimplência ativada")
+        Ctrl-->>Gestor: 422 Unprocessable Entity (Bloqueio Automático)
+    else Cliente Adimplente (Sem pendências financeiras)
+        OrderRepo-->>Service: Retorna FALSE
+        Service->>DB: Atualiza status para APROVADO e calcula data de vencimento
+        Service-->>Ctrl: Retorna Orçamento Aprovado
+        Ctrl-->>Gestor: 200 OK
+    end
+
+    Note over Gestor,DB: 3. Faturamento e Baixa de Estoque
+    Gestor->>Ctrl: POST /api/v1/budgets/{id}/invoice
+    Ctrl->>Service: invoiceBudget(tenantId, budgetId)
+    Service->>DB: Converte em Pedido (FATURADO_A_PRAZO), debita estoque e emite fatura de 30 dias
+    Service->>DB: Marca Orçamento como FATURADO com link para o pedido
+    Ctrl-->>Gestor: 200 OK (Faturamento concluído e liberado para expedição)
                     </div>
                 </div>
             </div>
@@ -1780,6 +2077,150 @@ sequenceDiagram
                             <td><span class="badge-auth">PDV_SELL</span></td>
                             <td>Ingestão em lote de vendas offline com deduplicação transparente via chave de idempotência.</td>
                         </tr>
+                        <!-- Loja Pública / Storefront -->
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/store/products</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Listagem pública de produtos com paginação leve e filtros facetados por categoria e editora para SSR (Next.js).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/store/products/{slug}</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>PDP - Página de Detalhe do Produto por slug com todas as variações SKUs, fotos e estoque disponível.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/store/search</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Busca textual rápida de títulos, sinopses e autores com autocomplete para a barra de pesquisa da loja.</td>
+                        </tr>
+                        <!-- Carrinho de Compras -->
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/cart</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Obter ou inicializar carrinho de compras via sessionId ou customerId.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/cart/items</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Adicionar item SKU ao carrinho com cálculo automático de subtotais e peso cúbico.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-put">PUT</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/cart/items/{skuId}</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Atualizar a quantidade desejada de um produto no carrinho (ou remover se quantidade for 0).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-delete">DELETE</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/cart/items/{skuId}</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Remover item do carrinho de compras.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-delete">DELETE</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/cart</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Esvaziar completamente o carrinho de compras.</td>
+                        </tr>
+                        <!-- Frete Multi-Transportadora -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/shipping/calculate</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Cotação de frete multi-transportadora (Correios SEDEX/PAC, Melhor Envio e Balcão) com caching no Redis.</td>
+                        </tr>
+                        <!-- Checkout & Pedidos E-Commerce -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/checkout</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Checkout transparente com Pagar.me V5: PIX com QR Code dinâmico, Cartão de Crédito tokenizado ou Boleto.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/orders</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Listar pedidos do tenant ou do cliente logado com paginação e status.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/orders/{id}</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Detalhes completos do pedido, itens faturados, transações e endereço de entrega.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/orders/{id}/ship</td>
+                            <td><span class="badge-auth">STORE_MANAGER</span></td>
+                            <td>Despachar pedido informando transportadora, código de rastreamento e URL de tracking.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/orders/{id}/deliver</td>
+                            <td><span class="badge-auth">STORE_MANAGER</span></td>
+                            <td>Confirmar entrega do pedido ao cliente final.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/ecommerce/orders/{id}/cancel</td>
+                            <td><span class="badge-auth">STORE_MANAGER</span></td>
+                            <td>Cancelar pedido e estornar automaticamente as unidades no estoque físico.</td>
+                        </tr>
+                        <!-- Webhooks Pagar.me V5 -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/webhooks/pagarme</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Endpoint assíncrono para notificações do Pagar.me V5 com garantia de idempotência estrita.</td>
+                        </tr>
+                        <!-- Vendas a Prazo e Orçamentos Corporativos -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/budgets</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Criar novo orçamento corporativo/institucional com condições de pagamento a prazo (ex.: 30 dias).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/budgets</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Listar orçamentos corporativos cadastrados com filtros facetados.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/budgets/{id}</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Obter espelho detalhado do orçamento para aprovação formal do cliente.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/budgets/{id}/submit</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Submeter orçamento para a esteira formal de aprovação.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/budgets/{id}/approve</td>
+                            <td><span class="badge-auth">STORE_MANAGER</span></td>
+                            <td>Aprovar orçamento corporativo — Executa a Trava de Inadimplência automática bloqueando inadimplentes.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/budgets/{id}/reject</td>
+                            <td><span class="badge-auth">STORE_MANAGER</span></td>
+                            <td>Rejeitar orçamento corporativo com registro da justificativa.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/budgets/{id}/invoice</td>
+                            <td><span class="badge-auth">STORE_MANAGER</span></td>
+                            <td>Faturar orçamento aprovado: cria pedido a prazo com boleto de 30 dias e debita estoque físico.</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -1801,6 +2242,9 @@ sequenceDiagram
                 <li><strong>Trava de Segurança na Sangria de Caixa:</strong> Uma sangria é sumariamente rejeitada pelo motor de domínio caso o valor solicitado exceda o montante em dinheiro em espécie efetivamente existente na gaveta do caixa.</li>
                 <li><strong>Idempotência Rigorosa de Vendas Offline:</strong> O PDV mobile em stands ou áreas remotas gera um <code>client_uuid</code> antes de enviar a venda. Caso a conexão oscile e retransmita o lote, o backend reconhece a chave prévia e não debita o estoque nem duplica faturamento.</li>
                 <li><strong>Chave de Acesso e Protocolo NFC-e (Modelo 65):</strong> Cada venda de balcão ou feira gera uma chave canônica de 44 dígitos com dígito verificador módulo 11, XML homologado com tag <code>&lt;mod&gt;65&lt;/mod&gt;</code> e QR Code para consulta direta pelo consumidor na SEFAZ.</li>
+                <li><strong>Trava Automática de Inadimplência em Vendas a Prazo:</strong> O cliente corporativo/institucional é terminantemente bloqueado de aprovar novos orçamentos caso possua qualquer pedido faturado anterior em aberto com boletos vencidos (inadimplência ativa). O motor de domínio impede a operação com <code>BusinessException</code> até a quitação integral das pendências.</li>
+                <li><strong>Checkout Transparente Pagar.me V5 & Webhook com Idempotência:</strong> O checkout online disponibiliza PIX dinâmico com chave copia-e-cola em milissegundos, cartão com antifraude integrado e boleto registrado. O webhook de notificação valida a chave de evento na tabela <code>processed_webhooks</code>, eliminando qualquer risco de processamento duplicado de pagamentos.</li>
+                <li><strong>Cálculo Inteligente de Frete com Cache Redis:</strong> As cotações multi-transportadora (Correios SEDEX/PAC e Melhor Envio) utilizam cálculo ponderado de peso real versus peso cúbico (fator volumétrico 6.000) com persistência em cache Redis por 60 minutos para resposta sub-segundo.</li>
             </ul>
         </section>
 

@@ -301,9 +301,116 @@ classDiagram
         +BigDecimal amount
     }
 
+    class Cart {
+        +UUID id
+        +UUID tenantId
+        +String sessionId
+        +UUID customerId
+        +List~CartItem~ items
+        +addItem(UUID skuId, int qty, BigDecimal price)
+        +updateItemQuantity(UUID skuId, int qty)
+        +removeItem(UUID skuId)
+        +clear()
+        +calculateSubtotal() BigDecimal
+        +calculateTotalItems() int
+    }
+
+    class CartItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +String productTitle
+        +int quantity
+        +BigDecimal unitPrice
+        +getTotal() BigDecimal
+    }
+
+    class Order {
+        +UUID id
+        +UUID tenantId
+        +String orderNumber
+        +OrderStatus status
+        +BigDecimal subtotal
+        +BigDecimal discount
+        +BigDecimal shippingAmount
+        +BigDecimal totalAmount
+        +ShippingCarrier shippingCarrier
+        +ShippingService shippingService
+        +String trackingCode
+        +ShippingAddress shippingAddress
+        +List~OrderItem~ items
+        +List~OrderPayment~ payments
+        +markAsPaid(String transactionId)
+        +markAsInvoiced(LocalDate dueDate)
+        +ship(String trackingCode, String trackingUrl)
+        +deliver()
+        +cancel(String reason)
+    }
+
+    class OrderItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +String productTitle
+        +int quantity
+        +BigDecimal unitPrice
+        +BigDecimal discount
+        +BigDecimal total
+    }
+
+    class OrderPayment {
+        +UUID id
+        +EcommercePaymentMethod paymentMethod
+        +PaymentGateway gateway
+        +String gatewayTransactionId
+        +PaymentStatus status
+        +BigDecimal amount
+        +int installments
+        +String pixQrCode
+        +String pixCopiaCola
+        +String boletoBarcode
+        +String boletoUrl
+        +LocalDate boletoDueDate
+        +markAsPaid(String transactionId)
+    }
+
+    class CorporateBudget {
+        +UUID id
+        +UUID tenantId
+        +String budgetNumber
+        +String corporateName
+        +String cnpj
+        +BudgetStatus status
+        +BigDecimal totalAmount
+        +int paymentTermsDays
+        +LocalDate dueDate
+        +submitForApproval()
+        +approve(boolean hasOverdueInvoices)
+        +reject(String reason)
+        +markAsInvoiced(UUID orderId)
+    }
+
+    class CorporateBudgetItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +String productTitle
+        +int quantity
+        +BigDecimal unitPrice
+        +BigDecimal total
+    }
+
     Tenant "1" --> "*" Company : possui filiais
     Tenant "1" --> "*" User : possui colaboradores
     Tenant "1" --> "*" Product : cataloga
+    Tenant "1" --> "*" Cart : carrinhos
+    Tenant "1" --> "*" Order : pedidos e-commerce
+    Tenant "1" --> "*" CorporateBudget : orçamentos corporativos
+    Cart "1" --> "*" CartItem : itens do carrinho
+    Order "1" --> "*" OrderItem : itens faturados
+    Order "1" --> "*" OrderPayment : parcelas e gateways
+    CorporateBudget "1" --> "*" CorporateBudgetItem : itens orçados
+    CorporateBudget ..> Order : faturado em
     Product "1" --> "*" Sku : variações
     Sku "1" --> "*" BundleItem : itens compostos
     Sku "1" --> "1" Dimensions : medidas frete
@@ -530,6 +637,108 @@ erDiagram
         uuid sale_id FK
         varchar payment_method
         numeric amount
+    }
+
+    tenants ||--o{ carts : "RLS protegido"
+    carts ||--o{ cart_items : "contem"
+    tenants ||--o{ orders : "RLS protegido"
+    orders ||--o{ order_items : "contem"
+    orders ||--o{ order_payments : "transacoes"
+    tenants ||--o{ corporate_budgets : "RLS protegido"
+    corporate_budgets ||--o{ corporate_budget_items : "itens orcamento"
+    corporate_budgets ||--o| orders : "gera fatura a prazo"
+    tenants ||--o{ processed_webhooks : "idempotencia estrita"
+
+    carts {
+        uuid id PK
+        uuid tenant_id FK
+        varchar session_id
+        uuid customer_id FK
+        timestamp created_at
+    }
+
+    cart_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid cart_id FK
+        uuid sku_id FK
+        int quantity
+        numeric unit_price
+    }
+
+    orders {
+        uuid id PK
+        uuid tenant_id FK
+        varchar order_number UK
+        varchar status
+        numeric subtotal
+        numeric discount
+        numeric shipping_amount
+        numeric total_amount
+        varchar shipping_carrier
+        varchar tracking_code
+        timestamp paid_at
+        timestamp shipped_at
+        timestamp delivered_at
+    }
+
+    order_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid order_id FK
+        uuid sku_id FK
+        varchar sku_code
+        varchar product_title
+        int quantity
+        numeric unit_price
+        numeric total
+    }
+
+    order_payments {
+        uuid id PK
+        uuid tenant_id FK
+        uuid order_id FK
+        varchar payment_method
+        varchar gateway
+        varchar gateway_transaction_id
+        varchar status
+        numeric amount
+        text pix_copia_cola
+        varchar boleto_barcode
+        date boleto_due_date
+    }
+
+    corporate_budgets {
+        uuid id PK
+        uuid tenant_id FK
+        varchar budget_number UK
+        varchar corporate_name
+        varchar cnpj
+        varchar status
+        numeric total_amount
+        int payment_terms_days
+        date due_date
+        uuid invoiced_order_id FK
+    }
+
+    corporate_budget_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid budget_id FK
+        uuid sku_id FK
+        int quantity
+        numeric unit_price
+        numeric total
+    }
+
+    processed_webhooks {
+        uuid id PK
+        uuid tenant_id FK
+        varchar gateway
+        varchar event_id UK
+        varchar event_type
+        varchar status
+        timestamp processed_at
     }
 ```
 
@@ -791,6 +1000,82 @@ sequenceDiagram
     end
     Service-->>Ctrl: OfflineBatchSyncResult (Sucesso com contagem de deduplicações)
     Ctrl-->>PDV: 200 OK
+```
+
+#### J. Checkout Transparente e Webhooks Assíncronos Pagar.me V5 (Idempotência e Mensageria)
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Cliente as Cliente Loja Virtual
+    participant Ctrl as EcommerceController
+    participant Service as EcommerceService
+    participant Gateway as PagarmeGatewayAdapter (API V5)
+    participant DB as PostgreSQL (RLS)
+    participant HookCtrl as PaymentWebhookController
+    participant Queue as RabbitMQ (order.exchange)
+
+    Note over Cliente,DB: 1. Checkout Transparente e Reserva de Estoque
+    Cliente->>Ctrl: POST /api/v1/ecommerce/checkout (Itens, Frete, Pagamento PIX/Cartão)
+    Ctrl->>Service: checkout(tenantId, request)
+    Service->>DB: Valida estoque e reserva unidades temporariamente
+    Service->>Gateway: Cria pedido/cobrança no Pagar.me v5
+    Gateway-->>Service: Retorna QR Code PIX, Linha Digitável ou Token Aprovado
+    Service->>DB: Salva Order (AGUARDANDO_PAGAMENTO) e OrderPayment
+    Service-->>Ctrl: OrderResponse {orderNumber, pixQrCode, copiaCola}
+    Ctrl-->>Cliente: 201 Created (Exibe QR Code na tela)
+
+    Note over HookCtrl,Queue: 2. Webhook Assíncrono de Pagamento e Idempotência
+    Gateway->>HookCtrl: POST /api/v1/webhooks/pagarme {event: "order.paid", id: "evt_123"}
+    HookCtrl->>Service: processPagarmeWebhook(tenantId, eventId, payload)
+    Service->>DB: Consulta processed_webhooks (evt_123)
+    alt Webhook Já Processado Anteriormente
+        Service-->>HookCtrl: Ignora com idempotência (200 OK)
+    else Primeiro Recebimento do Webhook
+        Service->>DB: Atualiza Order para PAGO e debita estoque real (VENDA_ECOMMERCE)
+        Service->>DB: Registra evento na tabela processed_webhooks
+        Service->>Queue: Publica mensagem na fila order.payment.approved para emissão de NF-e
+        Service-->>HookCtrl: 200 OK (Sucesso)
+    end
+```
+
+#### K. Venda a Prazo / Orçamento Institucional e Trava de Inadimplência Obrigatória
+```mermaid
+sequenceDiagram
+    autonumber
+    actor ClientePJ as Cliente Institucional (Escola/Universidade)
+    actor Gestor as Gestor Comercial da Livraria
+    participant Ctrl as CorporateBudgetController
+    participant Service as CorporateBudgetService
+    participant OrderRepo as OrderRepositoryPort (RLS)
+    participant DB as PostgreSQL (RLS)
+
+    Note over ClientePJ,DB: 1. Solicitação e Criação do Orçamento
+    ClientePJ->>Ctrl: POST /api/v1/budgets (CNPJ, Itens, Prazo: 30 dias)
+    Ctrl->>Service: createBudget(tenantId, request)
+    Service->>DB: Salva CorporateBudget (Status: RASCUNHO)
+    Ctrl-->>ClientePJ: 201 Created (ORC-20261112-001)
+
+    Note over Gestor,OrderRepo: 2. Avaliação de Crédito & Trava de Inadimplência
+    Gestor->>Ctrl: POST /api/v1/budgets/{id}/approve
+    Ctrl->>Service: approveBudget(tenantId, budgetId)
+    Service->>OrderRepo: hasOverdueInvoices(tenantId, budget.cnpj)
+    alt Cliente Inadimplente (Possui boletos/pedidos faturados vencidos)
+        OrderRepo-->>Service: Retorna TRUE
+        Service-->>Ctrl: Lança BusinessException ("Trava de Inadimplência ativada")
+        Ctrl-->>Gestor: 422 Unprocessable Entity (Bloqueio Automático)
+    else Cliente Adimplente (Sem pendências financeiras)
+        OrderRepo-->>Service: Retorna FALSE
+        Service->>DB: Atualiza status para APROVADO e calcula data de vencimento
+        Service-->>Ctrl: Retorna Orçamento Aprovado
+        Ctrl-->>Gestor: 200 OK
+    end
+
+    Note over Gestor,DB: 3. Faturamento e Baixa de Estoque
+    Gestor->>Ctrl: POST /api/v1/budgets/{id}/invoice
+    Ctrl->>Service: invoiceBudget(tenantId, budgetId)
+    Service->>DB: Converte em Pedido (FATURADO_A_PRAZO), debita estoque e emite fatura de 30 dias
+    Service->>DB: Marca Orçamento como FATURADO com link para o pedido
+    Ctrl-->>Gestor: 200 OK (Faturamento concluído e liberado para expedição)
 ```
 
 ---
@@ -1110,27 +1395,27 @@ Plano de ação e cronograma faseado de atividades para o desenvolvimento comple
 
 ---
 
-### Sprint 5: E-Commerce Público, Pagar.me e Vendas a Prazo `[EM ANDAMENTO]`
-- [ ] **Backend para Loja Pública Mobile-First**:
-  - Endpoints otimizados para catalogação rápida, busca textual com autocomplete, Drawer de filtros facetados (preço, categoria, autor, editora) e paginação leve.
-- [ ] **Carrinho & Checkout Otimizado para 1-Clique**:
-  - Cálculo de frete multi-transportadora (Correios e Melhor Envio com caching no Redis).
-  - Checkout transparente integrado à API v5 do Pagar.me:
-    - **PIX**: geração de QR Code dinâmico e chave "Copia e Cola" em milissegundos.
-    - **Cartão de Crédito**: tokenização direta de cartão e antifraude integrado.
-    - **Boleto Bancário**: geração com registro imediato.
-  - Webhooks assíncronos do Pagar.me com tratamento de idempotência e retentativas automáticas no RabbitMQ.
-- [ ] **Fluxo de Venda a Prazo (Faturamento / Orçamento Institucional)**:
-  - Criação de Orçamento corporativo pelo gestor ou cliente institucional.
-  - Envio do espelho do orçamento para aprovação formal.
-  - **Trava de Inadimplência**: bloqueio rigoroso e automático de aprovação de novos orçamentos caso o cliente possua qualquer pedido faturado pendente e vencido, até quitação integral.
-  - Orçamento aprovado → geração do boleto faturado (ex.: prazo 30 dias) e liberação do despacho com rastreamento.
-- [ ] **Expedição e Logística**:
-  - Emissão automática de NF-e (modelo 55) pós-aprovação do pagamento e geração automática de etiquetas de postagem e rastreio.
+### Sprint 5: E-Commerce Público, Pagar.me e Vendas a Prazo `[CONCLUÍDO]`
+- [x] **Backend para Loja Pública Mobile-First**:
+  - Endpoints otimizados para catalogação rápida (`/api/v1/store/products`), PDP detalhada por slug com variações (`/api/v1/store/products/{slug}`) e busca textual com autocomplete (`/api/v1/store/search`).
+- [x] **Carrinho & Checkout Otimizado para 1-Clique**:
+  - Carrinho de compras desacoplado por sessão e por cliente com cálculo de subtotais e peso cúbico (`/api/v1/ecommerce/cart`).
+  - Cálculo de frete multi-transportadora (Correios SEDEX/PAC, Melhor Envio e Retirada) com caching distribuído no Redis por 60 min (`/api/v1/ecommerce/shipping/calculate`).
+  - Checkout transparente integrado à API v5 do Pagar.me (`/api/v1/ecommerce/checkout`):
+    - **PIX**: geração em milissegundos com QR Code e payload canônico EMVCo Copia e Cola.
+    - **Cartão de Crédito**: tokenização direta com antifraude, detecção de bandeira e parcelamento.
+    - **Boleto Bancário**: geração registrada com código de barras, linha digitável e data de vencimento.
+  - Webhooks assíncronos do Pagar.me (`/api/v1/webhooks/pagarme`) com garantia de idempotência estrita na tabela `processed_webhooks` e publicação de eventos no RabbitMQ.
+- [x] **Fluxo de Venda a Prazo (Faturamento / Orçamento Institucional)**:
+  - Criação de Orçamento corporativo institucional com espelho formal para aprovação (`/api/v1/budgets`).
+  - **Trava de Inadimplência**: bloqueio rigoroso e automático de aprovação de novos orçamentos caso o cliente corporativo (CNPJ) possua qualquer pedido anterior faturado pendente e vencido, até quitação integral.
+  - Faturamento a prazo (`/api/v1/budgets/{id}/invoice`): conversão do orçamento aprovado em pedido com boleto de 30 dias e baixa física no estoque.
+- [x] **Expedição e Logística**:
+  - Gestão de pedidos (`/api/v1/ecommerce/orders`), despacho com código de rastreamento (`/ship`), confirmação de entrega (`/deliver`) e estorno com devolução de estoque (`/cancel`).
 
 ---
 
-### Sprint 6: Observabilidade, Auditoria e Homologação Fiscal
+### Sprint 6: Observabilidade, Auditoria e Homologação Fiscal `[PRÓXIMA ETAPA]`
 - [ ] **Telemetria Distribuída e Métricas (OpenTelemetry & Tempo)**:
   - Rastreamento distribuído ponta a ponta correlacionando requisições HTTP, queries SQL no PostgreSQL com RLS e chamadas a gateways externos.
   - Painéis no Grafana monitorando taxa de conversão de checkout, latência da API dos Correios, tempo de resposta da SEFAZ e consumo de CPU/Virtual Threads.
