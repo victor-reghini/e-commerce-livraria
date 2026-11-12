@@ -39,3 +39,4 @@ public record PaymentTransactionResult(
                 amount, 1, null, null, null, null, null, null, null, error);
     }
 }
+

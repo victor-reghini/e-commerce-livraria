@@ -17,3 +17,4 @@ public interface PagarmeGatewayPort {
                                           int dueDays, String customerName, String customerEmail,
                                           String customerDocument);
 }
+

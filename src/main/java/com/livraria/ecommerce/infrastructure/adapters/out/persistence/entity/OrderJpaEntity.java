@@ -132,3 +132,4 @@ public class OrderJpaEntity {
     @Column(name = "canceled_at")
     private Instant canceledAt;
 }
+

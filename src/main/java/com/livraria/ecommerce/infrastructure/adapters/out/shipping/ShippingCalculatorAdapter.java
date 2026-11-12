@@ -101,3 +101,4 @@ public class ShippingCalculatorAdapter implements ShippingCalculatorPort {
         return quotes;
     }
 }
+

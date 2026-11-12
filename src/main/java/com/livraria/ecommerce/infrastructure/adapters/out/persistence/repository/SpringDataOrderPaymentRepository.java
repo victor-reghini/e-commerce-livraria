@@ -13,3 +13,4 @@ public interface SpringDataOrderPaymentRepository extends JpaRepository<OrderPay
     List<OrderPaymentJpaEntity> findAllByTenantIdAndOrderId(UUID tenantId, UUID orderId);
     Optional<OrderPaymentJpaEntity> findByTenantIdAndGatewayTransactionId(UUID tenantId, String gatewayTransactionId);
 }
+

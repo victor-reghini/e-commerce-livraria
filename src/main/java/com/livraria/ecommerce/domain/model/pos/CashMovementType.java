@@ -6,3 +6,4 @@ public enum CashMovementType {
     VENDA,
     ESTORNO
 }
+

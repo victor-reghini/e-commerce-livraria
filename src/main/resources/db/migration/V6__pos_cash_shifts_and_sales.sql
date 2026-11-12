@@ -153,3 +153,4 @@ CREATE POLICY pos_sale_payments_tenant_isolation_policy ON pos_sale_payments
     AS PERMISSIVE FOR ALL
     USING (is_bypass_rls() OR tenant_id = current_app_tenant())
     WITH CHECK (is_bypass_rls() OR tenant_id = current_app_tenant());
+

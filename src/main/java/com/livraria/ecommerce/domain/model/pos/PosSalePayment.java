@@ -25,3 +25,4 @@ public class PosSalePayment {
     public PaymentMethod getPaymentMethod() { return paymentMethod; }
     public BigDecimal getAmount() { return amount; }
 }
+

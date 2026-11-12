@@ -11,3 +11,4 @@ import java.util.UUID;
 public interface SpringDataCashMovementRepository extends JpaRepository<CashMovementJpaEntity, UUID> {
     List<CashMovementJpaEntity> findAllByShiftIdOrderByCreatedAtAsc(UUID shiftId);
 }
+

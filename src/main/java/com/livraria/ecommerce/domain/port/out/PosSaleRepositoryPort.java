@@ -14,3 +14,4 @@ public interface PosSaleRepositoryPort {
     List<PosSale> findAllByShiftId(UUID shiftId);
     List<PosSale> findAllByCompanyId(UUID tenantId, UUID companyId, int page, int size);
 }
+

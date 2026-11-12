@@ -49,3 +49,4 @@ public class CartJpaEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 }
+

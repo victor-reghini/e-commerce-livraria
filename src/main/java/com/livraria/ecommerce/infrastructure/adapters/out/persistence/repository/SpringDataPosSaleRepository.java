@@ -22,3 +22,4 @@ public interface SpringDataPosSaleRepository extends JpaRepository<PosSaleJpaEnt
 
     List<PosSaleJpaEntity> findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(UUID tenantId, UUID companyId, Pageable pageable);
 }
+

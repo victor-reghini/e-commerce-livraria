@@ -56,3 +56,4 @@ public class CorporateBudgetItemJpaEntity {
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal total;
 }
+

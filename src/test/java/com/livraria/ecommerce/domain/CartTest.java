@@ -91,3 +91,4 @@ class CartTest {
                 .hasMessageContaining("vinculado a uma sessão ou a um cliente");
     }
 }
+

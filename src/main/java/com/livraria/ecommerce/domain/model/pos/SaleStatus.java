@@ -4,3 +4,4 @@ public enum SaleStatus {
     CONCLUIDA,
     CANCELADA
 }
+

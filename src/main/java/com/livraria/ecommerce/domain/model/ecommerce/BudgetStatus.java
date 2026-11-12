@@ -8,3 +8,4 @@ public enum BudgetStatus {
     REJEITADO,
     CANCELADO
 }
+

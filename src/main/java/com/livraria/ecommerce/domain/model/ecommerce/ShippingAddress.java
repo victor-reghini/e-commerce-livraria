@@ -30,3 +30,4 @@ public record ShippingAddress(
         return sb.toString();
     }
 }
+

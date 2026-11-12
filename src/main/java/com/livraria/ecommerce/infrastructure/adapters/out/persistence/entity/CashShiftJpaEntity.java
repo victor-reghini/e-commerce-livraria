@@ -77,3 +77,4 @@ public class CashShiftJpaEntity {
     @Builder.Default
     private List<CashMovementJpaEntity> movements = new ArrayList<>();
 }
+

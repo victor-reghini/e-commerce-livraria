@@ -85,3 +85,4 @@ public class OrderPaymentJpaEntity {
     @Column(name = "paid_at")
     private Instant paidAt;
 }
+

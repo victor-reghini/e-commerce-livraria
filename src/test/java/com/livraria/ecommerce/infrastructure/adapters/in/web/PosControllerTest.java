@@ -261,3 +261,4 @@ class PosControllerTest {
                 .andExpect(jsonPath("$.alreadyProcessedDuplicates").value(1));
     }
 }
+

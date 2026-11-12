@@ -62,3 +62,4 @@ public class OrderItemJpaEntity {
     @Column(length = 10)
     private String cfop;
 }
+

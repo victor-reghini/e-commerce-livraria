@@ -105,3 +105,4 @@ public class CorporateBudgetJpaEntity {
     @Column(name = "approved_at")
     private Instant approvedAt;
 }
+

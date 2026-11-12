@@ -86,3 +86,4 @@ public class PagarmeGatewayAdapter implements PagarmeGatewayPort {
         return String.format("%04X", crc);
     }
 }
+

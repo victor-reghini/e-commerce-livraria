@@ -36,3 +36,4 @@ public interface EcommerceUseCase {
 
     Order cancelOrder(UUID tenantId, UUID orderId, String reason);
 }
+

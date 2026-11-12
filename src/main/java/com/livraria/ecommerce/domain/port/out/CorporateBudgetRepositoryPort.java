@@ -13,3 +13,4 @@ public interface CorporateBudgetRepositoryPort {
     List<CorporateBudget> findAllByTenantIdAndCnpj(UUID tenantId, String cnpj);
     CorporateBudget save(CorporateBudget budget);
 }
+

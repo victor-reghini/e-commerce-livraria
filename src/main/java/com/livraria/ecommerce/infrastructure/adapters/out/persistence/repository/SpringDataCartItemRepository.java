@@ -12,3 +12,4 @@ public interface SpringDataCartItemRepository extends JpaRepository<CartItemJpaE
     Optional<CartItemJpaEntity> findByTenantIdAndCartIdAndSkuId(UUID tenantId, UUID cartId, UUID skuId);
     void deleteAllByTenantIdAndCartId(UUID tenantId, UUID cartId);
 }
+

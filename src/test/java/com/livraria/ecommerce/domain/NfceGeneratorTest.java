@@ -58,3 +58,4 @@ class NfceGeneratorTest {
         assertTrue(xml.contains("Livraria Cultura"));
     }
 }
+

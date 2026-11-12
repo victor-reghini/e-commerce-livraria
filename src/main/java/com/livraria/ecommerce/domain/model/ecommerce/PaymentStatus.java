@@ -7,3 +7,4 @@ public enum PaymentStatus {
     CANCELADO,
     ESTORNADO
 }
+

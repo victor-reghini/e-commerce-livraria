@@ -6,3 +6,4 @@ public enum EcommercePaymentMethod {
     BOLETO,
     FATURAMENTO_A_PRAZO
 }
+

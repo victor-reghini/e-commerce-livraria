@@ -6,3 +6,4 @@ public enum NfceStatus {
     CONTINGENCIA_OFFLINE,
     CANCELADA
 }
+

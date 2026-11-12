@@ -22,3 +22,4 @@ public record ShippingQuote(
         return error == null || error.isBlank();
     }
 }
+

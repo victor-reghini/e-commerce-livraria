@@ -144,3 +144,4 @@ class PosSaleTest {
         assertThrows(BusinessException.class, sale::cancel);
     }
 }
+

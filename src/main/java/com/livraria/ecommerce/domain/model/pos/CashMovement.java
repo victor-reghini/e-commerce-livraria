@@ -40,3 +40,4 @@ public class CashMovement {
     public UUID getOperatorId() { return operatorId; }
     public Instant getCreatedAt() { return createdAt; }
 }
+

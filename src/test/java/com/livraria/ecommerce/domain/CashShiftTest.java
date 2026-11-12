@@ -139,3 +139,4 @@ class CashShiftTest {
         assertThrows(BusinessException.class, () -> shift.closeBlind(BigDecimal.TEN, "fechar"));
     }
 }
+

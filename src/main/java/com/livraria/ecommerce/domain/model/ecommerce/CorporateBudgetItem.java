@@ -35,3 +35,4 @@ public class CorporateBudgetItem {
     public BigDecimal getDiscount() { return discount; }
     public BigDecimal getTotal() { return total; }
 }
+

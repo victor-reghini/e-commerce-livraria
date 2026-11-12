@@ -234,3 +234,4 @@ CREATE POLICY processed_webhooks_tenant_isolation_policy ON processed_webhooks
     USING (tenant_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid);
 
 CREATE INDEX idx_webhooks_tenant_event ON processed_webhooks(tenant_id, gateway, event_id);
+

@@ -189,3 +189,4 @@ public class CorporateBudget {
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getApprovedAt() { return approvedAt; }
 }
+

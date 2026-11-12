@@ -12,3 +12,4 @@ public interface SpringDataCartRepository extends JpaRepository<CartJpaEntity, U
     Optional<CartJpaEntity> findByTenantIdAndSessionId(UUID tenantId, String sessionId);
     Optional<CartJpaEntity> findByTenantIdAndCustomerId(UUID tenantId, UUID customerId);
 }
+

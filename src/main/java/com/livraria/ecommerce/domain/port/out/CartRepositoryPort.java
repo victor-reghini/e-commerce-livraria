@@ -12,3 +12,4 @@ public interface CartRepositoryPort {
     Cart save(Cart cart);
     void delete(UUID id);
 }
+

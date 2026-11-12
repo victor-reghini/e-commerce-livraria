@@ -22,3 +22,4 @@ public interface SpringDataCashShiftRepository extends JpaRepository<CashShiftJp
             UUID tenantId, UUID companyId, Pageable pageable
     );
 }
+

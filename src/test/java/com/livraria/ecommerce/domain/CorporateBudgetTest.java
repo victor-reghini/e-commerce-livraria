@@ -92,3 +92,4 @@ class CorporateBudgetTest {
         assertThat(budget.getRejectionReason()).contains("acima do teto orçamentário");
     }
 }
+

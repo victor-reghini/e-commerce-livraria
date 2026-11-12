@@ -42,3 +42,4 @@ public interface SpringDataOrderRepository extends JpaRepository<OrderJpaEntity,
                                @Param("document") String document,
                                @Param("today") LocalDate today);
 }
+

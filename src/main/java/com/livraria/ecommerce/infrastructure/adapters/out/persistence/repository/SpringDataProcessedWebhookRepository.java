@@ -12,3 +12,4 @@ public interface SpringDataProcessedWebhookRepository extends JpaRepository<Proc
     Optional<ProcessedWebhookJpaEntity> findByTenantIdAndGatewayAndEventId(UUID tenantId, String gateway, String eventId);
     boolean existsByTenantIdAndGatewayAndEventId(UUID tenantId, String gateway, String eventId);
 }
+

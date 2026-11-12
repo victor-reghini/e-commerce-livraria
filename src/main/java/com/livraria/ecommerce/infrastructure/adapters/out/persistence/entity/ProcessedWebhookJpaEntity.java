@@ -46,3 +46,4 @@ public class ProcessedWebhookJpaEntity {
     @Column(name = "processed_at", nullable = false, updatable = false)
     private Instant processedAt;
 }
+

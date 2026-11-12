@@ -4,3 +4,4 @@ public enum PaymentGateway {
     PAGARME,
     FATURAMENTO_INTERNO
 }
+

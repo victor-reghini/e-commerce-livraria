@@ -4,3 +4,4 @@ public enum ShiftStatus {
     ABERTO,
     FECHADO
 }
+

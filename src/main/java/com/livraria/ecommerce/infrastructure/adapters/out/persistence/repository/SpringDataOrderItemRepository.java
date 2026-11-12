@@ -11,3 +11,4 @@ import java.util.UUID;
 public interface SpringDataOrderItemRepository extends JpaRepository<OrderItemJpaEntity, UUID> {
     List<OrderItemJpaEntity> findAllByTenantIdAndOrderId(UUID tenantId, UUID orderId);
 }
+

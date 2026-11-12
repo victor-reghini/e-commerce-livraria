@@ -11,3 +11,4 @@ import java.util.UUID;
 public interface SpringDataPosSaleItemRepository extends JpaRepository<PosSaleItemJpaEntity, UUID> {
     List<PosSaleItemJpaEntity> findAllBySaleId(UUID saleId);
 }
+

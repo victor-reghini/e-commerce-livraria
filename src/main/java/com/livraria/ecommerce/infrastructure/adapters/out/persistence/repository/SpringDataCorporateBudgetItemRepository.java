@@ -11,3 +11,4 @@ import java.util.UUID;
 public interface SpringDataCorporateBudgetItemRepository extends JpaRepository<CorporateBudgetItemJpaEntity, UUID> {
     List<CorporateBudgetItemJpaEntity> findAllByTenantIdAndBudgetId(UUID tenantId, UUID budgetId);
 }
+

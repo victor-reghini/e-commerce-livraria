@@ -42,3 +42,4 @@ public interface PosUseCase {
 
     PosDto.ThermalReceiptResponse getThermalReceipt(UUID saleId);
 }
+

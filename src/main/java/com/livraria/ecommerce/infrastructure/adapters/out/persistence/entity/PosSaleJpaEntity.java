@@ -96,3 +96,4 @@ public class PosSaleJpaEntity {
     @Builder.Default
     private List<PosSalePaymentJpaEntity> payments = new ArrayList<>();
 }
+

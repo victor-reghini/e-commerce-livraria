@@ -56,3 +56,4 @@ public final class NfceGenerator {
         return sb.toString();
     }
 }
+

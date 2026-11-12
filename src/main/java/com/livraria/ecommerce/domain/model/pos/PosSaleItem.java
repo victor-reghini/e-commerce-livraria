@@ -41,3 +41,4 @@ public class PosSaleItem {
     public BigDecimal getDiscount() { return discount; }
     public BigDecimal getSubtotal() { return subtotal; }
 }
+

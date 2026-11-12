@@ -111,3 +111,4 @@ class StorefrontControllerTest {
                 .andExpect(jsonPath("$[0].title").value("Clean Architecture"));
     }
 }
+

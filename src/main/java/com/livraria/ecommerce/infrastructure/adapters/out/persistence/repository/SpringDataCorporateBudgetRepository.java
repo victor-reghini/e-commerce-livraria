@@ -16,3 +16,4 @@ public interface SpringDataCorporateBudgetRepository extends JpaRepository<Corpo
     Page<CorporateBudgetJpaEntity> findAllByTenantIdOrderByCreatedAtDesc(UUID tenantId, Pageable pageable);
     List<CorporateBudgetJpaEntity> findAllByTenantIdAndCnpjOrderByCreatedAtDesc(UUID tenantId, String cnpj);
 }
+

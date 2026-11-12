@@ -41,3 +41,4 @@ public class OrderItem {
     public String getNcm() { return ncm; }
     public String getCfop() { return cfop; }
 }
+

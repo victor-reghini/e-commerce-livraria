@@ -102,3 +102,4 @@ public class CorporateBudgetDto {
             String reason
     ) {}
 }
+

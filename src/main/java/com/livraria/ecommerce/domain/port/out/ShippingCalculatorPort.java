@@ -11,3 +11,4 @@ public interface ShippingCalculatorPort {
                                  int totalWeightGrams, double height, double width, double depth,
                                  BigDecimal declaredValue);
 }
+

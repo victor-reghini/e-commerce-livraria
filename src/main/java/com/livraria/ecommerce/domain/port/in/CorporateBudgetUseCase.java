@@ -30,3 +30,4 @@ public interface CorporateBudgetUseCase {
      */
     Order invoiceBudget(UUID tenantId, UUID budgetId);
 }
+

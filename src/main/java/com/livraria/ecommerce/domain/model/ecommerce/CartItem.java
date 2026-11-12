@@ -54,3 +54,4 @@ public class CartItem {
     public int getQuantity() { return quantity; }
     public BigDecimal getUnitPrice() { return unitPrice; }
 }
+

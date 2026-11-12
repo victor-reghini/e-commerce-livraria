@@ -12,3 +12,4 @@ public interface CashShiftRepositoryPort {
     Optional<CashShift> findCurrentOpenShift(UUID tenantId, UUID companyId, UUID cashierId);
     List<CashShift> findAllByCompanyId(UUID tenantId, UUID companyId, int page, int size);
 }
+

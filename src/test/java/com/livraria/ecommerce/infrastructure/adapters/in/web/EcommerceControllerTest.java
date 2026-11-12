@@ -195,3 +195,4 @@ class EcommerceControllerTest {
                 .andExpect(jsonPath("$.status").value("ENVIADO"));
     }
 }
+
