@@ -1164,6 +1164,8 @@ erDiagram
                 <button class="tab-btn" onclick="switchTab('seq-offline-sync', this)">11. PDV Offline & Idempotência</button>
                 <button class="tab-btn" onclick="switchTab('seq-checkout', this)">12. Checkout & Pagar.me V5</button>
                 <button class="tab-btn" onclick="switchTab('seq-budget', this)">13. Venda a Prazo & Trava Inadimplência</button>
+                <button class="tab-btn" onclick="switchTab('seq-fiscal-nfe', this)">14. Homologação Fiscal SEFAZ & Contingência</button>
+                <button class="tab-btn" onclick="switchTab('seq-audit-obs', this)">15. Auditoria LGPD/PCI & Telemetria</button>
             </div>
 
             <!-- Tab 1: Tenancy -->
@@ -1618,6 +1620,80 @@ sequenceDiagram
     Service->>DB: Converte em Pedido (FATURADO_A_PRAZO), debita estoque e emite fatura de 30 dias
     Service->>DB: Marca Orçamento como FATURADO com link para o pedido
     Ctrl-->>Gestor: 200 OK (Faturamento concluído e liberado para expedição)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 14: Homologação Fiscal SEFAZ & Contingência -->
+            <div id="seq-fiscal-nfe" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Fluxo de Emissão Canônica de NF-e (Modelo 55), Chave de 44 Dígitos Módulo 11, Imunidade Constitucional e Contingência Offline:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Admin as Administrador / Sistema
+    participant FiscalCtrl as FiscalController
+    participant FiscalSvc as FiscalService
+    participant KeyGen as SefazAccessKeyGenerator
+    participant XmlBld as NfeXmlBuilder
+    participant Sefaz as SefazGatewayAdapter
+    participant DB as PostgreSQL 16 (RLS Kernel)
+    participant Audit as AuditService (LGPD Masked)
+    participant Metrics as ObservabilityMetricsService
+
+    Admin->>FiscalCtrl: POST /api/v1/fiscal/invoices/nfe/order/{orderId}
+    FiscalCtrl->>FiscalSvc: emitNfeForOrder(orderId, series)
+    FiscalSvc->>DB: Busca Pedido e Filial Emitente (RLS)
+    FiscalSvc->>DB: getNextInvoiceNumber (Sequencial Atômico por Filial/Série)
+    FiscalSvc->>KeyGen: generateKey(cUF=35, AAMM=2611, CNPJ, mod=55, nNF, cDV)
+    KeyGen-->>FiscalSvc: Retorna Chave Canônica de 44 Dígitos (com Módulo 11)
+    FiscalSvc->>XmlBld: buildNfeXml (Imunidade Livros Art. 150 CF/88, CSOSN 400, CST 08)
+    XmlBld-->>FiscalSvc: Retorna XML Canônico Assinado com DigestValue
+
+    FiscalSvc->>Sefaz: authorizeInvoice(xml, accessKey, "55", "SP")
+    alt SEFAZ Operacional (Status 100 - Autorizado)
+        Sefaz-->>FiscalSvc: SefazAuthResult.success(protocolNumber: 135260001234567, nfeProc)
+        FiscalSvc->>DB: Salva fiscal_invoices (Status: AUTORIZADA, XML com protocolo)
+    else SEFAZ Offline / Timeout (Fallback Automático de Contingência)
+        Sefaz-->>FiscalSvc: SefazAuthResult.contingency(accessKey, "Indisponibilidade SEFAZ")
+        FiscalSvc->>DB: Salva fiscal_invoices (Status: CONTINGENCIA, tpEmis=9)
+    end
+
+    FiscalSvc->>Audit: recordEvent("FISCAL_NFE_EMITTED", key, details)
+    Audit->>DB: Insere em audit_logs (RLS Protegido)
+    FiscalSvc->>Metrics: recordInvoiceEmitted("55", status)
+    FiscalSvc-->>FiscalCtrl: Retorna FiscalInvoiceResponse
+    FiscalCtrl-->>Admin: 201 Created (Chave, Protocolo, Status)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 15: Auditoria LGPD/PCI & Telemetria -->
+            <div id="seq-audit-obs" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Fluxo de Rastreamento Distribuído (MDC), Trilha de Auditoria Imutável e Métricas Prometheus:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Cliente as Usuário / Sistema Externo
+    participant MdcFilter as MdcLoggingFilter
+    participant Controller as REST Controllers
+    participant AuditSvc as AuditService
+    participant DB as PostgreSQL 16 (RLS)
+    participant Prom as Prometheus Scraper (/actuator/prometheus)
+    participant Loki as Grafana Loki / CloudWatch (Logs JSON)
+
+    Cliente->>MdcFilter: Requisição HTTP (Header X-Correlation-ID, X-Tenant-ID)
+    MdcFilter->>MdcFilter: MDC.put("correlation_id", uuid), MDC.put("tenant_id", tenantId)
+    MdcFilter->>Controller: Encaminha Requisição com Contexto
+    Controller->>Loki: Log estruturado em JSON contendo tenant_id, correlation_id, user_id
+
+    Controller->>AuditSvc: recordEvent(userId, action, details)
+    AuditSvc->>AuditSvc: Mascara CPF (***.456.789-**), PAN (4111********1111) e Tokens
+    AuditSvc->>DB: INSERT INTO audit_logs (Imutável via Rules: no_update, no_delete)
+
+    Prom->>Controller: GET /actuator/prometheus
+    Controller-->>Prom: Exporta contadores (ecommerce.orders, fiscal.invoices, JVM, Threads)
                     </div>
                 </div>
             </div>
@@ -2220,6 +2296,78 @@ sequenceDiagram
                             <td class="endpoint-path">/api/v1/budgets/{id}/invoice</td>
                             <td><span class="badge-auth">STORE_MANAGER</span></td>
                             <td>Faturar orçamento aprovado: cria pedido a prazo com boleto de 30 dias e debita estoque físico.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/fiscal/invoices/nfe/order/{orderId}</td>
+                            <td><span class="badge-auth">FISCAL_EMIT_NFE</span></td>
+                            <td>Emitir NF-e Modelo 55 para pedido e-commerce/corporativo com chave de 44 dígitos e autorização SEFAZ.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/fiscal/invoices/nfce/sale/{saleId}</td>
+                            <td><span class="badge-auth">FISCAL_EMIT_NFCE</span></td>
+                            <td>Emitir NFC-e Modelo 65 para venda do PDV com contingência offline automática.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/fiscal/invoices/{id}</td>
+                            <td><span class="badge-auth">AUTHENTICATED</span></td>
+                            <td>Obter detalhes completos de uma nota fiscal por ID interno.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/fiscal/invoices/key/{accessKey}</td>
+                            <td><span class="badge-auth">AUTHENTICATED</span></td>
+                            <td>Consultar nota fiscal pela chave canônica de acesso de 44 dígitos.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/fiscal/invoices/{id}/xml</td>
+                            <td><span class="badge-auth">AUTHENTICATED</span></td>
+                            <td>Download do XML assinado da NF-e envelopado com protocolo de autorização SEFAZ (nfeProc).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/fiscal/invoices/{id}/danfe</td>
+                            <td><span class="badge-auth">AUTHENTICATED</span></td>
+                            <td>Visualização e impressão do espelho do DANFE em HTML responsivo.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/fiscal/invoices/{id}/cancel</td>
+                            <td><span class="badge-auth">FISCAL_CANCEL</span></td>
+                            <td>Cancelar nota fiscal homologada perante a SEFAZ com registro de evento (cStat 135).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/fiscal/status-sefaz</td>
+                            <td><span class="badge-auth">AUTHENTICATED</span></td>
+                            <td>Consultar status do WebService da SEFAZ (consStatServ - 107 Servico em Operacao).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/fiscal/invoices</td>
+                            <td><span class="badge-auth">AUTHENTICATED</span></td>
+                            <td>Listar histórico de notas fiscais emitidas pelo Tenant com paginação.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/audit/logs</td>
+                            <td><span class="badge-auth">AUDIT_VIEW</span></td>
+                            <td>Consultar trilha de auditoria imutável com filtros e mascaramento LGPD/PCI-DSS.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/observability/summary</td>
+                            <td><span class="badge-public">PUBLIC</span></td>
+                            <td>Resumo consolidado de telemetria e métricas operacionais de negócio.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/actuator/prometheus</td>
+                            <td><span class="badge-public">PUBLIC</span></td>
+                            <td>Endpoint de scraping de métricas Prometheus (JVM, Virtual Threads, HikariCP, E-commerce).</td>
                         </tr>
                     </tbody>
                 </table>

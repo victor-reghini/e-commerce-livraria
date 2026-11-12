@@ -50,6 +50,7 @@ public class SecurityConfig {
                                 "/api/v1/ecommerce/shipping/**",
                                 "/api/v1/ecommerce/checkout",
                                 "/api/v1/webhooks/**",
+                                "/api/v1/observability/**",
                                 "/actuator/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
