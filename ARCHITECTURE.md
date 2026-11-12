@@ -1,15 +1,36 @@
 # Especificação Arquitetural e de Engenharia de Software
 
-Este documento consolida a arquitetura técnica, modelagem de dados, diagramas UML em Mermaid, catálogo de endpoints e fluxos operacionais da **Plataforma de E-commerce, PDV e Gestão Multi-Tenant**.
+Este documento consolida a arquitetura técnica, estrutura hexagonal de pastas, modelagem de dados, diagramas UML (Classes, Entidade-Relacionamento e Sequência), catálogo completo de endpoints REST e diretrizes de infraestrutura da **Plataforma de E-commerce, PDV e Gestão Multi-Tenant**.
 
-Para a documentação web interativa com renderização dinâmica, acesse o endpoint:
-👉 `http://localhost:8080/docs` (ou `/documentation`)
+Para a documentação web interativa e viva com renderização dinâmica e ferramentas de zoom/pan, acesse:
+👉  (ou )
 
 ---
 
-## 1. Visão Geral da Arquitetura (3 Camadas)
+## 1. Visão Geral da Arquitetura & Diagramas UML
 
-A plataforma substitui o ecossistema monolítico legado WordPress/WooCommerce por uma arquitetura moderna, desacoplada (Headless), orientada a eventos e baseada nos princípios da **Clean Architecture (Hexagonal)** com suporte nativo a **Virtual Threads (Project Loom)** no Java 21 LTS e isolamento estrito de múltiplos lojistas via **Row-Level Security (RLS)** no PostgreSQL 16.
+O sistema adota o padrão **Clean Architecture / Arquitetura Hexagonal (Ports & Adapters)** com **Java 21 LTS** e **Project Loom (Virtual Threads)** ativadas nativamente para altíssima concorrência I/O:
+
+```
+src/main/java/com/livraria/ecommerce/
+├── domain/                    # Núcleo de regras de negócio puras (sem dependência de frameworks)
+│   ├── model/                 # Entidades e Value Objects (Tenant, User, Product, Sku, etc.)
+│   ├── port/in/               # Use Cases / Portas de Entrada (CatalogUseCase, BatchImportUseCase, etc.)
+│   ├── port/out/              # Portas de Saída (Repositórios, Storage, Mensageria)
+│   └── exception/             # Exceções de Domínio e Negócio
+├── application/               # Serviços de Aplicação e Orquestração
+│   ├── service/               # Implementação dos Use Cases (CatalogService, BatchImportService, etc.)
+│   └── dto/                   # DTOs de comando e transferência
+└── infrastructure/            # Adaptadores de Tecnologia e Frameworks
+    ├── adapters/in/web/       # Controllers REST, Filtros (Tenant, MDC Logging), Exception Handlers e /docs
+    ├── adapters/out/          # Implementações das Portas de Saída:
+    │   ├── persistence/       # PostgreSQL com Row-Level Security (RLS) e HikariCP Tenant Aware
+    │   └── storage/           # AWS SDK v2 (S3 nativo e MinIO local compatível com presigned URLs)
+    ├── config/                # Configurações Spring (Segurança, OpenAPI, RabbitMQ, Redis, DataSource)
+    └── security/              # Autenticação JWT, UserPrincipal e Filtros de Segurança
+```
+
+### 1.1. Diagrama de Arquitetura em 3 Camadas
 
 ```mermaid
 flowchart TB
@@ -51,11 +72,9 @@ flowchart TB
     Adapters -->|Presigned URLs| S3
 ```
 
----
+### 1.2. Diagrama de Classes de Domínio (UML Class Diagram)
 
-## 2. Diagrama de Classes de Domínio (UML Class Diagram)
-
-O domínio da aplicação é desacoplado de anotações de persistência ou de frameworks (DDD/Clean Architecture).
+O diagrama abaixo ilustra o núcleo de domínio, com separação de Produto Pai, Variações (SKUs), Composição de Kits Virtuais/Físicos e Validação de ISBN:
 
 ```mermaid
 classDiagram
@@ -159,21 +178,254 @@ classDiagram
         +String cfop
     }
 
+    class StockTransfer {
+        +UUID id
+        +UUID tenantId
+        +String transferNumber
+        +UUID originCompanyId
+        +UUID destinationCompanyId
+        +TransferStatus status
+        +TransferType transferType
+        +List~StockTransferItem~ items
+        +dispatch(UUID dispatchedBy)
+        +receive(Map quantities, UUID receivedBy)
+        +calculateTotalItems() int
+        +calculateTotalValue() BigDecimal
+    }
+
+    class StockTransferItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +int quantityRequested
+        +int quantityDispatched
+        +int quantityReceived
+        +int getDivergence()
+        +BigDecimal unitPrice
+    }
+
+    class StockMovement {
+        +UUID id
+        +UUID tenantId
+        +UUID companyId
+        +UUID skuId
+        +MovementType movementType
+        +int quantityChange
+        +int balanceAfter
+        +UUID referenceId
+        +String reason
+    }
+
+    class BlindAudit {
+        +UUID id
+        +UUID tenantId
+        +UUID companyId
+        +String code
+        +AuditStatus status
+        +List~BlindAuditItem~ items
+        +scanBarcode(UUID skuId, int count)
+        +finalizeAudit()
+        +reconcile()
+        +getTotalDivergence() int
+    }
+
+    class BlindAuditItem {
+        +UUID id
+        +UUID skuId
+        +int quantityScanned
+        +int quantityExpected
+        +int divergence
+        +incrementScanned(int count)
+    }
+
+    class CashShift {
+        +UUID id
+        +UUID tenantId
+        +UUID companyId
+        +UUID cashierId
+        +String shiftNumber
+        +ShiftStatus status
+        +BigDecimal openingBalance
+        +BigDecimal expectedBalance
+        +BigDecimal actualBalance
+        +BigDecimal divergence
+        +addSupply(BigDecimal amount, String reason)
+        +addBleed(BigDecimal amount, String reason)
+        +recordSalePayment(BigDecimal amount, PaymentMethod method)
+        +closeBlind(BigDecimal countedCash, String notes)
+    }
+
+    class CashMovement {
+        +UUID id
+        +UUID shiftId
+        +CashMovementType movementType
+        +BigDecimal amount
+        +PaymentMethod paymentMethod
+        +String reason
+    }
+
+    class PosSale {
+        +UUID id
+        +UUID companyId
+        +UUID shiftId
+        +String saleNumber
+        +UUID clientUuid
+        +BigDecimal subtotal
+        +BigDecimal discount
+        +BigDecimal total
+        +BigDecimal totalPaid
+        +BigDecimal changeAmount
+        +SaleStatus status
+        +String nfceKey
+        +NfceStatus nfceStatus
+        +cancel()
+    }
+
+    class PosSaleItem {
+        +UUID id
+        +UUID skuId
+        +int quantity
+        +BigDecimal unitPrice
+        +BigDecimal discount
+        +BigDecimal subtotal
+    }
+
+    class PosSalePayment {
+        +UUID id
+        +PaymentMethod paymentMethod
+        +BigDecimal amount
+    }
+
+    class Cart {
+        +UUID id
+        +UUID tenantId
+        +String sessionId
+        +UUID customerId
+        +List~CartItem~ items
+        +addItem(UUID skuId, int qty, BigDecimal price)
+        +updateItemQuantity(UUID skuId, int qty)
+        +removeItem(UUID skuId)
+        +clear()
+        +calculateSubtotal() BigDecimal
+        +calculateTotalItems() int
+    }
+
+    class CartItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +String productTitle
+        +int quantity
+        +BigDecimal unitPrice
+        +getTotal() BigDecimal
+    }
+
+    class Order {
+        +UUID id
+        +UUID tenantId
+        +String orderNumber
+        +OrderStatus status
+        +BigDecimal subtotal
+        +BigDecimal discount
+        +BigDecimal shippingAmount
+        +BigDecimal totalAmount
+        +ShippingCarrier shippingCarrier
+        +ShippingService shippingService
+        +String trackingCode
+        +ShippingAddress shippingAddress
+        +List~OrderItem~ items
+        +List~OrderPayment~ payments
+        +markAsPaid(String transactionId)
+        +markAsInvoiced(LocalDate dueDate)
+        +ship(String trackingCode, String trackingUrl)
+        +deliver()
+        +cancel(String reason)
+    }
+
+    class OrderItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +String productTitle
+        +int quantity
+        +BigDecimal unitPrice
+        +BigDecimal discount
+        +BigDecimal total
+    }
+
+    class OrderPayment {
+        +UUID id
+        +EcommercePaymentMethod paymentMethod
+        +PaymentGateway gateway
+        +String gatewayTransactionId
+        +PaymentStatus status
+        +BigDecimal amount
+        +int installments
+        +String pixQrCode
+        +String pixCopiaCola
+        +String boletoBarcode
+        +String boletoUrl
+        +LocalDate boletoDueDate
+        +markAsPaid(String transactionId)
+    }
+
+    class CorporateBudget {
+        +UUID id
+        +UUID tenantId
+        +String budgetNumber
+        +String corporateName
+        +String cnpj
+        +BudgetStatus status
+        +BigDecimal totalAmount
+        +int paymentTermsDays
+        +LocalDate dueDate
+        +submitForApproval()
+        +approve(boolean hasOverdueInvoices)
+        +reject(String reason)
+        +markAsInvoiced(UUID orderId)
+    }
+
+    class CorporateBudgetItem {
+        +UUID id
+        +UUID skuId
+        +String skuCode
+        +String productTitle
+        +int quantity
+        +BigDecimal unitPrice
+        +BigDecimal total
+    }
+
     Tenant "1" --> "*" Company : possui filiais
     Tenant "1" --> "*" User : possui colaboradores
     Tenant "1" --> "*" Product : cataloga
+    Tenant "1" --> "*" Cart : carrinhos
+    Tenant "1" --> "*" Order : pedidos e-commerce
+    Tenant "1" --> "*" CorporateBudget : orçamentos corporativos
+    Cart "1" --> "*" CartItem : itens do carrinho
+    Order "1" --> "*" OrderItem : itens faturados
+    Order "1" --> "*" OrderPayment : parcelas e gateways
+    CorporateBudget "1" --> "*" CorporateBudgetItem : itens orçados
+    CorporateBudget ..> Order : faturado em
     Product "1" --> "*" Sku : variações
     Sku "1" --> "*" BundleItem : itens compostos
     Sku "1" --> "1" Dimensions : medidas frete
     Sku ..> FiscalDecompositionItem : decompõe em
     Sku ..> IsbnValidator : valida
+    Company "1" --> "*" StockTransfer : remessas
+    StockTransfer "1" --> "*" StockTransferItem : itens
+    Company "1" --> "*" StockMovement : ledger
+    Company "1" --> "*" BlindAudit : auditorias de retorno
+    BlindAudit "1" --> "*" BlindAuditItem : contagens bipadas
+    Company "1" --> "*" CashShift : turnos de caixa
+    CashShift "1" --> "*" CashMovement : suprimentos / sangrias
+    CashShift "1" --> "*" PosSale : vendas vinculadas
+    PosSale "1" --> "*" PosSaleItem : itens vendidos
+    PosSale "1" --> "*" PosSalePayment : múltiplos pagamentos
 ```
 
----
+### 1.3. Diagrama Entidade-Relacionamento (ER) com Row-Level Security
 
-## 3. Diagrama Entidade-Relacionamento (ER) & Row-Level Security
-
-Todas as tabelas do catálogo e cadastros transacionais utilizam isolamento multitenant forçado (`FORCE ROW LEVEL SECURITY`). O acesso direto aos dados sem definir a variável de sessão `app.current_tenant` resulta em retorno vazio.
+Todas as tabelas de escopo do lojista possuem `tenant_id` e políticas ativas com `FORCE ROW LEVEL SECURITY`:
 
 ```mermaid
 erDiagram
@@ -261,16 +513,233 @@ erDiagram
         int quantity
         int reserved_quantity
     }
+
+    stock_transfers {
+        uuid id PK
+        uuid tenant_id FK
+        varchar transfer_number UK
+        uuid origin_company_id FK
+        uuid destination_company_id FK
+        varchar status
+        varchar transfer_type
+        timestamp dispatched_at
+        timestamp received_at
+    }
+
+    stock_transfer_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid transfer_id FK
+        uuid sku_id FK
+        int quantity_requested
+        int quantity_dispatched
+        int quantity_received
+        numeric unit_cost
+        numeric unit_price
+    }
+
+    stock_movements {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid sku_id FK
+        varchar movement_type
+        int quantity_change
+        int balance_after
+        uuid reference_id
+        timestamp created_at
+    }
+
+    blind_audits {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid transfer_id FK
+        varchar code UK
+        varchar status
+        uuid auditor_id
+        timestamp completed_at
+    }
+
+    blind_audit_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid audit_id FK
+        uuid sku_id FK
+        int quantity_scanned
+        int quantity_expected
+        int divergence
+    }
+
+    cash_shifts {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid cashier_id FK
+        varchar shift_number UK
+        varchar status
+        numeric opening_balance
+        numeric expected_balance
+        numeric actual_balance
+        numeric divergence
+        timestamp opened_at
+        timestamp closed_at
+    }
+
+    cash_movements {
+        uuid id PK
+        uuid tenant_id FK
+        uuid shift_id FK
+        varchar movement_type
+        numeric amount
+        varchar payment_method
+        varchar reason
+        timestamp created_at
+    }
+
+    pos_sales {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid shift_id FK
+        varchar sale_number UK
+        uuid client_uuid UK
+        numeric subtotal
+        numeric discount
+        numeric total
+        numeric total_paid
+        numeric change_amount
+        varchar status
+        varchar nfce_key
+        varchar nfce_status
+        timestamp created_at
+    }
+
+    pos_sale_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid sale_id FK
+        uuid sku_id FK
+        int quantity
+        numeric unit_price
+        numeric discount
+        numeric subtotal
+    }
+
+    pos_sale_payments {
+        uuid id PK
+        uuid tenant_id FK
+        uuid sale_id FK
+        varchar payment_method
+        numeric amount
+    }
+
+    tenants ||--o{ carts : "RLS protegido"
+    carts ||--o{ cart_items : "contem"
+    tenants ||--o{ orders : "RLS protegido"
+    orders ||--o{ order_items : "contem"
+    orders ||--o{ order_payments : "transacoes"
+    tenants ||--o{ corporate_budgets : "RLS protegido"
+    corporate_budgets ||--o{ corporate_budget_items : "itens orcamento"
+    corporate_budgets ||--o| orders : "gera fatura a prazo"
+    tenants ||--o{ processed_webhooks : "idempotencia estrita"
+
+    carts {
+        uuid id PK
+        uuid tenant_id FK
+        varchar session_id
+        uuid customer_id FK
+        timestamp created_at
+    }
+
+    cart_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid cart_id FK
+        uuid sku_id FK
+        int quantity
+        numeric unit_price
+    }
+
+    orders {
+        uuid id PK
+        uuid tenant_id FK
+        varchar order_number UK
+        varchar status
+        numeric subtotal
+        numeric discount
+        numeric shipping_amount
+        numeric total_amount
+        varchar shipping_carrier
+        varchar tracking_code
+        timestamp paid_at
+        timestamp shipped_at
+        timestamp delivered_at
+    }
+
+    order_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid order_id FK
+        uuid sku_id FK
+        varchar sku_code
+        varchar product_title
+        int quantity
+        numeric unit_price
+        numeric total
+    }
+
+    order_payments {
+        uuid id PK
+        uuid tenant_id FK
+        uuid order_id FK
+        varchar payment_method
+        varchar gateway
+        varchar gateway_transaction_id
+        varchar status
+        numeric amount
+        text pix_copia_cola
+        varchar boleto_barcode
+        date boleto_due_date
+    }
+
+    corporate_budgets {
+        uuid id PK
+        uuid tenant_id FK
+        varchar budget_number UK
+        varchar corporate_name
+        varchar cnpj
+        varchar status
+        numeric total_amount
+        int payment_terms_days
+        date due_date
+        uuid invoiced_order_id FK
+    }
+
+    corporate_budget_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid budget_id FK
+        uuid sku_id FK
+        int quantity
+        numeric unit_price
+        numeric total
+    }
+
+    processed_webhooks {
+        uuid id PK
+        uuid tenant_id FK
+        varchar gateway
+        varchar event_id UK
+        varchar event_type
+        varchar status
+        timestamp processed_at
+    }
 ```
 
----
+### 1.4. Diagramas de Sequência dos Principais Fluxos
 
-## 4. Diagramas de Sequência dos Fluxos Principais
-
-### 4.1. Resolução de Multi-Tenancy e Injeção de RLS no HikariCP
-
-Garante a segurança de isolamento antes de qualquer consulta SQL.
-
+#### A. Multi-Tenancy RLS e Injeção de Sessão no HikariCP
 ```mermaid
 sequenceDiagram
     autonumber
@@ -292,48 +761,7 @@ sequenceDiagram
     DataSource-->>Client: Resposta isolada e segura
 ```
 
----
-
-### 4.2. Autenticação JWT, Resolução RBAC e Rotação de Tokens via Redis
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Operador / Administrador
-    participant AuthCtrl as AuthController
-    participant AuthService as AuthService
-    participant UserRepo as UserRepositoryPort
-    participant Redis as Redis 7 Cache
-    participant JWT as JwtTokenProvider
-
-    User->>AuthCtrl: POST /api/v1/auth/login {tenantId, email, password}
-    AuthCtrl->>AuthService: authenticate(tenantId, email, password)
-    AuthService->>UserRepo: findByEmail(tenantId, email)
-    UserRepo-->>AuthService: User com PasswordHash BCrypt e Roles
-    AuthService->>AuthService: BCrypt.checkpw(password, hash)
-    AuthService->>JWT: generateAccessToken(user, authorities)
-    AuthService->>JWT: generateRefreshToken(user)
-    AuthService->>Redis: Salva RefreshToken com TTL (7 dias)
-    AuthService-->>AuthCtrl: AuthResponse {accessToken, refreshToken}
-    AuthCtrl-->>User: 200 OK + Tokens
-
-    Note over User,Redis: Rotação de Token (Refresh Token Rotation)
-    User->>AuthCtrl: POST /api/v1/auth/refresh {refreshToken}
-    AuthCtrl->>AuthService: refreshToken(token)
-    AuthService->>Redis: Verifica existência e invalida token anterior
-    AuthService->>JWT: Gera novo par Access + Refresh Token
-    AuthService->>Redis: Registra novo Refresh Token
-    AuthService-->>User: 200 OK + Novo Par de Tokens
-```
-
----
-
-### 4.3. Estoque Virtual Dinâmico para Kits & Combos
-
-A disponibilidade é calculada sob demanda com base no menor saldo disponível entre os itens constituintes:
-
-$$\text{Saldo Virtual} = \min_{i \in \text{Itens}} \left( \left\lfloor \frac{\text{Saldo Disponível}_i}{\text{Quantidade Necessária}_i} \right\rfloor \right)$$
-
+#### B. Estoque Virtual Dinâmico para Kits & Combos
 ```mermaid
 sequenceDiagram
     autonumber
@@ -354,12 +782,7 @@ sequenceDiagram
     ProdCtrl-->>Caixa: 200 OK: 4
 ```
 
----
-
-### 4.4. Motor de Rateio e Decomposição Fiscal de Kits para NF-e/NFC-e
-
-Calcula a proporção exata de cada item no preço final faturado do combo, preservando NCM e CFOP e reconciliando centavos de dízimas periódicas:
-
+#### C. Rateio e Decomposição Fiscal de Kits para NF-e/NFC-e
 ```mermaid
 sequenceDiagram
     autonumber
@@ -377,12 +800,7 @@ sequenceDiagram
     Ctrl-->>Fiscal: 200 OK (Soma fecha perfeitamente em R$ 180,00)
 ```
 
----
-
-### 4.5. Importação em Lote via Streaming com Rollback Isolado
-
-Suporta arquivos de até 50.000 livros em chunks de 500 registros utilizando Apache POI e Commons CSV:
-
+#### D. Importação em Lote via Streaming com Rollback Isolado
 ```mermaid
 sequenceDiagram
     autonumber
@@ -404,120 +822,508 @@ sequenceDiagram
             Tx-->>Batch: Sucesso (successCount++)
         else Linha com Erro (ex: ISBN Inválido)
             Tx->>DB: Executa Rollback apenas desta linha
-            Tx-->>Batch: Registra erro em List<BatchImportRowError> (failureCount++)
+            Tx-->>Batch: Registra erro em List~BatchImportRowError~ (failureCount++)
         end
     end
     Batch-->>Ctrl: BatchImportResult {total: 1000, sucesso: 998, falhas: 2, errors: [...]}
     Ctrl-->>Admin: 200 OK + Relatório de Auditoria
 ```
 
----
-
-### 4.6. Upload e Download Seguro via Presigned URLs (MinIO S3 / AWS S3)
-
+#### E. Remessa de Estoque para Evento / Feira e Emissão de Romaneio
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Usuário / Cliente
-    participant Backend as Backend Java (Spring Boot)
-    participant Storage as S3StorageAdapter (S3Presigner)
-    participant S3 as MinIO S3 / Amazon S3
+    actor Gestor as Gestor de Operações
+    participant Ctrl as EventStockController
+    participant Service as EventStockService
+    participant StockRepo as StockRepositoryPort
+    participant MoveRepo as StockMovementRepositoryPort
+    participant TransferRepo as StockTransferRepositoryPort
 
-    Note over User,S3: Fluxo de Upload Direto de Capa ou E-book
-    User->>Backend: POST /api/v1/products/{id}/upload-cover-url?fileName=capa.jpg
-    Backend->>Storage: generatePresignedUploadUrl(bucket, key, 15 min)
-    Storage-->>Backend: URL assinada com SigV4
-    Backend-->>User: 200 OK {uploadUrl, s3Key, expiresInSeconds: 900}
-    User->>S3: PUT [uploadUrl] (Binário da imagem direto ao Storage)
-    S3-->>User: 200 OK (Sem sobrecarga de banda no backend)
+    Note over Gestor,TransferRepo: 1. Criação da Transferência e Reserva Temporária de Estoque
+    Gestor->>Ctrl: POST /api/v1/transfers (Origem: Matriz, Destino: Feira Bienal, Itens: [SKU-1: 50 un])
+    Ctrl->>Service: createTransfer(request, userId)
+    Service->>StockRepo: getAvailableStock(Matriz, SKU-1)
+    StockRepo-->>Service: Saldo disponível = 120 un (OK >= 50)
+    Service->>StockRepo: reserveStock(Matriz, SKU-1, 50)
+    Service->>MoveRepo: save(StockMovement: RESERVA, -50 un, ref: transferId)
+    Service->>TransferRepo: save(Transfer: RESERVADO)
+    TransferRepo-->>Ctrl: 201 Created (TRF-2026-001)
 
-    Note over User,S3: Fluxo de Download Seguro de E-book Autorizado
-    User->>Backend: GET /api/v1/products/skus/{skuId}/download-ebook-url
-    Backend->>Backend: Valida compra autorizada do cliente
-    Backend->>Storage: generatePresignedDownloadUrl(bucket, key, 15 min)
-    Storage-->>Backend: URL assinada temporária
-    Backend-->>User: Retorna link temporário para download
-    User->>S3: GET [downloadUrl] (Baixa arquivo EPUB/PDF)
+    Note over Gestor,TransferRepo: 2. Despacho e Saída Física de Estoque
+    Gestor->>Ctrl: POST /api/v1/transfers/{id}/dispatch
+    Ctrl->>Service: dispatchTransfer(transferId, userId)
+    Service->>StockRepo: transferStock (Dedução física na Matriz)
+    Service->>MoveRepo: save(StockMovement: TRANSFERENCIA_SAIDA, -50 un)
+    Service->>TransferRepo: save(Transfer: EM_TRANSITO)
+    TransferRepo-->>Ctrl: 200 OK (Status: EM_TRANSITO)
+
+    Note over Gestor,TransferRepo: 3. Geração do Romaneio de Transporte
+    Gestor->>Ctrl: GET /api/v1/transfers/{id}/romaneio
+    Ctrl->>Service: generateRomaneio(transferId)
+    Service-->>Ctrl: RomaneioDocumentResponse (Peso Cúbico: 25.000g, R$ 2.450,00, Dados Fiscais)
+    Ctrl-->>Gestor: 200 OK (Documento gerado para transporte)
+```
+
+#### F. Conferência Cega de Retorno com Bipagem e Conciliação no Ledger
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operador as Operador de Conferência (Logística)
+    participant Ctrl as EventStockController
+    participant Service as EventStockService
+    participant SkuRepo as SpringDataSkuRepository
+    participant AuditRepo as BlindAuditRepositoryPort
+    participant StockRepo as StockRepositoryPort
+    participant MoveRepo as StockMovementRepositoryPort
+
+    Note over Operador,MoveRepo: 1. Abertura da Conferência Cega vinculada à Remessa
+    Operador->>Ctrl: POST /api/v1/audits (companyId: Feira, transferId: TRF-001)
+    Ctrl->>Service: createBlindAudit(request)
+    Service->>AuditRepo: save(BlindAudit: ABERTA, expectedQuantities do Romaneio)
+    AuditRepo-->>Ctrl: 201 Created (AUD-100)
+
+    Note over Operador,MoveRepo: 2. Bipagem Rápida de Códigos de Barras / ISBNs
+    loop Para cada exemplar físico desembalado
+        Operador->>Ctrl: POST /api/v1/audits/{id}/scan (barcode: "9788535902778", qty: 1)
+        Ctrl->>Service: scanBarcode(auditId, barcode, 1)
+        Service->>SkuRepo: findByBarcode / findByIsbn / findBySkuCode
+        SkuRepo-->>Service: Sku encontrado (ID, Título, SKU)
+        Service->>AuditRepo: audit.scanBarcode(skuId, 1) -> incrementa quantityScanned & recalcula divergência
+    end
+
+    Note over Operador,MoveRepo: 3. Finalização e Conciliação Contábil / Ledger
+    Operador->>Ctrl: POST /api/v1/audits/{id}/finalize
+    Ctrl->>Service: finalizeAudit(auditId)
+    Operador->>Ctrl: POST /api/v1/audits/{id}/reconcile
+    Ctrl->>Service: reconcileAudit(auditId, userId)
+    Service->>StockRepo: Ajusta saldo físico real por SKU (ex: +3 ou -2)
+    Service->>MoveRepo: save(StockMovement: AJUSTE_AUDITORIA com divergência e saldo após)
+    Service->>AuditRepo: save(BlindAudit: CONCILIADA)
+    AuditRepo-->>Ctrl: 200 OK (Auditoria concluída com divergências conciliadas)
+```
+
+#### G. Turno de Caixa, Suprimento, Sangria e Fechamento Cego
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Caixa as Operador de Caixa / Balcão
+    participant Ctrl as PosController
+    participant Service as PosService
+    participant ShiftRepo as CashShiftRepositoryPort
+
+    Note over Caixa,ShiftRepo: 1. Abertura do Turno com Fundo de Troco
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/open (openingBalance: R$ 100,00)
+    Ctrl->>Service: openShift(companyId, 100.00, cashierId)
+    Service->>ShiftRepo: save(CashShift: ABERTO, Suprimento Inicial: R$ 100,00)
+    ShiftRepo-->>Ctrl: 201 Created (CX-2026-001)
+
+    Note over Caixa,ShiftRepo: 2. Suprimento e Sangria com Trava de Saldo em Gaveta
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/{id}/supply (amount: R$ 50,00)
+    Ctrl->>Service: supplyCash(shiftId, 50.00, "Reforço troco")
+    Service->>ShiftRepo: Registra movimento SUPRIMENTO (Saldo gaveta = R$ 150,00)
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/{id}/bleed (amount: R$ 100,00)
+    Ctrl->>Service: bleedCash(shiftId, 100.00, "Retirada cofre")
+    Service->>ShiftRepo: Valida saldo >= 100 e registra SANGRIA (Saldo gaveta = R$ 50,00)
+
+    Note over Caixa,ShiftRepo: 3. Fechamento Cego com Apuração de Quebra de Caixa
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/{id}/close (countedCash: R$ 48,00)
+    Ctrl->>Service: closeShift(shiftId, 48.00)
+    Note over Service: Esperado = R$ 50,00 | Contado = R$ 48,00 | Divergência = R$ -2,00
+    Service->>ShiftRepo: save(CashShift: FECHADO, divergence: -2.00)
+    ShiftRepo-->>Ctrl: 200 OK (Turno fechado com auditoria)
+```
+
+#### H. Venda Balcão / Feira, Múltiplos Pagamentos, Baixa de Estoque e NFC-e
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Cliente as Consumidor Presencial
+    actor Caixa as Operador PDV
+    participant Ctrl as PosController
+    participant Service as PosService
+    participant StockRepo as StockRepositoryPort
+    participant MoveRepo as StockMovementRepositoryPort
+    participant SaleRepo as PosSaleRepositoryPort
+    participant ShiftRepo as CashShiftRepositoryPort
+
+    Cliente->>Caixa: Apresenta 2 Livros (EAN-13: 9788576082675, R$ 50,00 cada)
+    Caixa->>Ctrl: POST /api/v1/pos/sales (Itens: [SKU-1: 2 un], Pagamentos: [PIX: R$ 60,00, Dinheiro: R$ 50,00])
+    Ctrl->>Service: createSale(request, cashierId)
+    Service->>StockRepo: getAvailableStock(Filial, SKU-1)
+    StockRepo-->>Service: Saldo disponível = 15 un (OK >= 2)
+    Note over Service: Total: R$ 100,00 | Pago: R$ 110,00 | Troco: R$ 10,00
+    Service->>StockRepo: setStockQuantity (Baixa física de 2 un na filial)
+    Service->>MoveRepo: save(StockMovement: VENDA_PDV, -2 un, ref: saleId)
+    Service->>ShiftRepo: Registra recebimentos no turno do caixa
+    Note over Service: Gera Chave de 44 dígitos (Modelo 65), XML e QR Code SEFAZ
+    Service->>SaleRepo: save(PosSale: CONCLUIDA, nfceStatus: EMITIDA)
+    SaleRepo-->>Ctrl: 201 Created (VD-500)
+    Ctrl-->>Caixa: 201 Created (Retorna dados da venda e troco de R$ 10,00)
+    Caixa->>Ctrl: GET /api/v1/pos/sales/{id}/receipt
+    Ctrl-->>Caixa: Retorna cupom térmico ESC/POS
+```
+
+#### I. PDV Offline & Ingestão Resiliente com Chave de Idempotência
+```mermaid
+sequenceDiagram
+    autonumber
+    actor PDV as PWA PDV Mobile (Offline-First)
+    participant Ctrl as PosController
+    participant Service as PosService
+    participant SaleRepo as PosSaleRepositoryPort
+    participant StockRepo as StockRepositoryPort
+
+    Note over PDV,StockRepo: 1. Sincronização Delta de Catálogo
+    PDV->>Ctrl: GET /api/v1/pos/sync/catalog?companyId={standId}&updatedSince={timestamp}
+    Ctrl->>Service: syncCatalog(standId, timestamp)
+    Service-->>Ctrl: OfflineCatalogSyncResponse (Itens compactos com código, barcode, preço e estoque)
+    Ctrl-->>PDV: 200 OK (Cache local no IndexedDB)
+
+    Note over PDV,StockRepo: 2. Vendas Offline e Ingestão com Idempotência
+    PDV->>PDV: Realiza vendas offline gerando UUID v4 único (client_uuid) por venda
+    PDV->>Ctrl: POST /api/v1/pos/sync/offline-sales (Lote de vendas)
+    Ctrl->>Service: syncOfflineSales(salesList)
+    loop Para cada venda recebida
+        Service->>SaleRepo: findByClientUuid(tenantId, clientUuid)
+        alt Já Processada (Retransmissão de Rede)
+            SaleRepo-->>Service: Venda já existente (Ignora sem duplicar estoque nem faturamento)
+        else Nova Venda
+            Service->>StockRepo: Baixa estoque físico
+            Service->>SaleRepo: Salva venda e gera NFC-e em contingência offline
+        end
+    end
+    Service-->>Ctrl: OfflineBatchSyncResult (Sucesso com contagem de deduplicações)
+    Ctrl-->>PDV: 200 OK
+```
+
+#### J. Checkout Transparente e Webhooks Assíncronos Pagar.me V5 (Idempotência e Mensageria)
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Cliente as Cliente Loja Virtual
+    participant Ctrl as EcommerceController
+    participant Service as EcommerceService
+    participant Gateway as PagarmeGatewayAdapter (API V5)
+    participant DB as PostgreSQL (RLS)
+    participant HookCtrl as PaymentWebhookController
+    participant Queue as RabbitMQ (order.exchange)
+
+    Note over Cliente,DB: 1. Checkout Transparente e Reserva de Estoque
+    Cliente->>Ctrl: POST /api/v1/ecommerce/checkout (Itens, Frete, Pagamento PIX/Cartão)
+    Ctrl->>Service: checkout(tenantId, request)
+    Service->>DB: Valida estoque e reserva unidades temporariamente
+    Service->>Gateway: Cria pedido/cobrança no Pagar.me v5
+    Gateway-->>Service: Retorna QR Code PIX, Linha Digitável ou Token Aprovado
+    Service->>DB: Salva Order (AGUARDANDO_PAGAMENTO) e OrderPayment
+    Service-->>Ctrl: OrderResponse {orderNumber, pixQrCode, copiaCola}
+    Ctrl-->>Cliente: 201 Created (Exibe QR Code na tela)
+
+    Note over HookCtrl,Queue: 2. Webhook Assíncrono de Pagamento e Idempotência
+    Gateway->>HookCtrl: POST /api/v1/webhooks/pagarme {event: "order.paid", id: "evt_123"}
+    HookCtrl->>Service: processPagarmeWebhook(tenantId, eventId, payload)
+    Service->>DB: Consulta processed_webhooks (evt_123)
+    alt Webhook Já Processado Anteriormente
+        Service-->>HookCtrl: Ignora com idempotência (200 OK)
+    else Primeiro Recebimento do Webhook
+        Service->>DB: Atualiza Order para PAGO e debita estoque real (VENDA_ECOMMERCE)
+        Service->>DB: Registra evento na tabela processed_webhooks
+        Service->>Queue: Publica mensagem na fila order.payment.approved para emissão de NF-e
+        Service-->>HookCtrl: 200 OK (Sucesso)
+    end
+```
+
+#### K. Venda a Prazo / Orçamento Institucional e Trava de Inadimplência Obrigatória
+```mermaid
+sequenceDiagram
+    autonumber
+    actor ClientePJ as Cliente Institucional (Escola/Universidade)
+    actor Gestor as Gestor Comercial da Livraria
+    participant Ctrl as CorporateBudgetController
+    participant Service as CorporateBudgetService
+    participant OrderRepo as OrderRepositoryPort (RLS)
+    participant DB as PostgreSQL (RLS)
+
+    Note over ClientePJ,DB: 1. Solicitação e Criação do Orçamento
+    ClientePJ->>Ctrl: POST /api/v1/budgets (CNPJ, Itens, Prazo: 30 dias)
+    Ctrl->>Service: createBudget(tenantId, request)
+    Service->>DB: Salva CorporateBudget (Status: RASCUNHO)
+    Ctrl-->>ClientePJ: 201 Created (ORC-20261112-001)
+
+    Note over Gestor,OrderRepo: 2. Avaliação de Crédito & Trava de Inadimplência
+    Gestor->>Ctrl: POST /api/v1/budgets/{id}/approve
+    Ctrl->>Service: approveBudget(tenantId, budgetId)
+    Service->>OrderRepo: hasOverdueInvoices(tenantId, budget.cnpj)
+    alt Cliente Inadimplente (Possui boletos/pedidos faturados vencidos)
+        OrderRepo-->>Service: Retorna TRUE
+        Service-->>Ctrl: Lança BusinessException ("Trava de Inadimplência ativada")
+        Ctrl-->>Gestor: 422 Unprocessable Entity (Bloqueio Automático)
+    else Cliente Adimplente (Sem pendências financeiras)
+        OrderRepo-->>Service: Retorna FALSE
+        Service->>DB: Atualiza status para APROVADO e calcula data de vencimento
+        Service-->>Ctrl: Retorna Orçamento Aprovado
+        Ctrl-->>Gestor: 200 OK
+    end
+
+    Note over Gestor,DB: 3. Faturamento e Baixa de Estoque
+    Gestor->>Ctrl: POST /api/v1/budgets/{id}/invoice
+    Ctrl->>Service: invoiceBudget(tenantId, budgetId)
+    Service->>DB: Converte em Pedido (FATURADO_A_PRAZO), debita estoque e emite fatura de 30 dias
+    Service->>DB: Marca Orçamento como FATURADO com link para o pedido
+    Ctrl-->>Gestor: 200 OK (Faturamento concluído e liberado para expedição)
+```
+
+#### L. Homologação Fiscal SEFAZ: Emissão de NF-e 55, Chave de Acesso Módulo 11 e Contingência Offline
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Administrador / Sistema
+    participant FiscalCtrl as FiscalController
+    participant FiscalSvc as FiscalService
+    participant KeyGen as SefazAccessKeyGenerator
+    participant XmlBld as NfeXmlBuilder
+    participant Sefaz as SefazGatewayAdapter
+    participant DB as PostgreSQL 16 (RLS Kernel)
+    participant Audit as AuditService (LGPD Masked)
+    participant Metrics as ObservabilityMetricsService
+
+    Note over Admin,Metrics: 1. Disparo de Emissão de NF-e Modelo 55 (E-commerce)
+    Admin->>FiscalCtrl: POST /api/v1/fiscal/invoices/nfe/order/{orderId}
+    FiscalCtrl->>FiscalSvc: emitNfeForOrder(orderId, series)
+    FiscalSvc->>DB: Busca Pedido e Filial Emitente (RLS)
+    FiscalSvc->>DB: getNextInvoiceNumber (Sequencial Atômico por Filial/Série)
+    FiscalSvc->>KeyGen: generateKey(cUF=35, AAMM=2611, CNPJ, mod=55, nNF, cDV)
+    KeyGen-->>FiscalSvc: Retorna Chave Canônica de 44 Dígitos (com Módulo 11)
+    FiscalSvc->>XmlBld: buildNfeXml (Imunidade Livros Art. 150 CF/88, CSOSN 400, CST 08)
+    XmlBld-->>FiscalSvc: Retorna XML Canônico Assinado com DigestValue
+
+    Note over FiscalSvc,Sefaz: 2. Transmissão e Homologação SEFAZ
+    FiscalSvc->>Sefaz: authorizeInvoice(xml, accessKey, "55", "SP")
+    alt SEFAZ Operacional (Status 100 - Autorizado)
+        Sefaz-->>FiscalSvc: SefazAuthResult.success(protocolNumber: 135260001234567, nfeProc)
+        FiscalSvc->>DB: Salva fiscal_invoices (Status: AUTORIZADA, XML com protocolo)
+    else SEFAZ Offline / Timeout (Fallback Automático de Contingência)
+        Sefaz-->>FiscalSvc: SefazAuthResult.contingency(accessKey, "Indisponibilidade SEFAZ")
+        FiscalSvc->>DB: Salva fiscal_invoices (Status: CONTINGENCIA, tpEmis=9)
+    end
+
+    Note over FiscalSvc,Metrics: 3. Auditoria Imutável e Telemetria
+    FiscalSvc->>Audit: recordEvent("FISCAL_NFE_EMITTED", key, details)
+    Audit->>DB: Insere em audit_logs (RLS Protegido)
+    FiscalSvc->>Metrics: recordInvoiceEmitted("55", status)
+    FiscalSvc-->>FiscalCtrl: Retorna FiscalInvoiceResponse
+    FiscalCtrl-->>Admin: 201 Created (Chave, Protocolo, Status)
+```
+
+#### M. Observabilidade Distribuída, Trilha de Auditoria Imutável (LGPD/PCI-DSS) e Métricas Prometheus
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Cliente as Usuário / Sistema Externo
+    participant MdcFilter as MdcLoggingFilter
+    participant Controller as REST Controllers
+    participant AuditSvc as AuditService
+    participant DB as PostgreSQL 16 (RLS)
+    participant Prom as Prometheus Scraper (/actuator/prometheus)
+    participant Loki as Grafana Loki / CloudWatch (Logs JSON)
+
+    Note over Cliente,Loki: 1. Injeção de Contexto Distribuído (MDC & Correlation-ID)
+    Cliente->>MdcFilter: Requisição HTTP (Header X-Correlation-ID, X-Tenant-ID)
+    MdcFilter->>MdcFilter: MDC.put("correlation_id", uuid), MDC.put("tenant_id", tenantId)
+    MdcFilter->>Controller: Encaminha Requisição com Contexto
+    Controller->>Loki: Log estruturado em JSON contendo tenant_id, correlation_id, user_id
+
+    Note over Controller,DB: 2. Trilha de Auditoria Imutável com Mascaramento LGPD/PCI-DSS
+    Controller->>AuditSvc: recordEvent(userId, action, details)
+    AuditSvc->>AuditSvc: Mascara CPF (***.456.789-**), PAN (4111********1111) e Tokens
+    AuditSvc->>DB: INSERT INTO audit_logs (Imutável via Rules: no_update, no_delete)
+
+    Note over Prom,Controller: 3. Coleta de Métricas de Negócio em Tempo Real
+    Prom->>Controller: GET /actuator/prometheus
+    Controller-->>Prom: Exporta contadores (ecommerce.orders, fiscal.invoices, JVM, Threads)
 ```
 
 ---
 
-## 5. Catálogo Completo de Endpoints REST
+### Isolamento Multi-Tenant com PostgreSQL RLS (Row-Level Security)
+Diferente de abordagens frágeis onde o isolamento depende exclusivamente de cláusulas `WHERE tenant_id = ?` no código da aplicação, a plataforma utiliza **Row-Level Security (RLS) nativo no PostgreSQL**:
+1. O filtro HTTP intercepta a requisição e extrai o `tenant_id` (via cabeçalho `X-Tenant-ID`, subdomínio ou token JWT).
+2. O `TenantAwareDataSource` injeta o contexto na conexão do pool HikariCP: `SELECT set_config('app.current_tenant', :tenantId, false)`.
+3. O PostgreSQL bloqueia nativamente em nível de engine qualquer tentativa de leitura ou escrita fora do tenant ativo através da política com `FORCE ROW LEVEL SECURITY`.
+
+---
+
+## 2. Stack de Infraestrutura & Observabilidade (Fase 1: VPS)
+
+Projetado sob o princípio do **Twelve-Factor App** e **Zero Cloud-Lock-In**, permitindo execução idêntica em máquina local, em VPS Linux com Docker Compose, ou em serviços gerenciados AWS (ECS/RDS/ElastiCache/S3) apenas alterando variáveis de ambiente.
+
+| Serviço | Tecnologia | Papel no Ecossistema |
+| :--- | :--- | :--- |
+| **Roteamento & SSL** | Traefik v3 | Descoberta automática de containers e emissão de SSL Let's Encrypt |
+| **Banco de Dados** | PostgreSQL 16 Alpine | Banco relacional com RLS e extensões `uuid-ossp` e `pgcrypto` |
+| **Cache & Sessões** | Redis 7.2 Alpine | Cache de alta velocidade, sessões e rate limiting |
+| **Armazenamento S3** | MinIO Server | S3-compatible local com buckets pré-configurados (`ecommerce-media`, `ecommerce-ebooks`) |
+| **Mensageria** | RabbitMQ 3.13 Management | Processamento assíncrono de NF-e, webhooks e notificações |
+| **Métricas** | Prometheus + Micrometer | Coleta de métricas da JVM, Virtual Threads e latências de checkout |
+| **Logs Estruturados** | Grafana Loki + Promtail | Centralização de logs estruturados em JSON com campos de MDC |
+
+---
+
+## 3. Catálogo de Endpoints REST & Especificação de Serviços
+
+### 3.1. Catálogo Completo de Endpoints REST
 
 | Método | Endpoint | Permissão RBAC | Descrição |
 | :--- | :--- | :--- | :--- |
-| **GET** | `/api/v1/health` | Pública | Verificação de integridade e Virtual Threads ativas |
-| **GET** | `/docs` | Pública | Portal HTML interativo de documentação e diagramas UML |
-| **GET** | `/api/v1/auth/tenant-info` | Pública | Resolução visual do Tenant para a tela de login |
-| **POST** | `/api/v1/auth/login` | Pública | Autenticação com retorno de Access e Refresh Tokens |
-| **POST** | `/api/v1/auth/refresh` | Pública | Rotação de Refresh Token via Redis |
-| **POST** | `/api/v1/auth/logout` | Autenticado | Invalidação e inclusão de token na blacklist do Redis |
-| **POST** | `/api/v1/tenants` | `SUPER_ADMIN` | Cadastro de novo Tenant |
-| **GET** | `/api/v1/tenants/{id}` | `SUPER_ADMIN` | Buscar Tenant por ID |
-| **GET** | `/api/v1/tenants/slug/{slug}` | `SUPER_ADMIN` | Buscar Tenant pelo slug |
-| **POST** | `/api/v1/companies` | `TENANT_ADMIN` | Cadastrar filial ou stand de feira |
-| **GET** | `/api/v1/companies/{id}` | Autenticado | Buscar filial por ID |
-| **GET** | `/api/v1/companies/code/{code}` | Autenticado | Buscar filial por código (ex: MATRIZ) |
-| **GET** | `/api/v1/companies` | Autenticado | Listar todas as filiais do Tenant |
-| **POST** | `/api/v1/users` | `USER_MANAGE` | Criar usuário e atribuir permissões e filiais |
-| **GET** | `/api/v1/users/me` | Autenticado | Consultar perfil e authorities do usuário logado |
-| **GET** | `/api/v1/users/{id}` | `USER_MANAGE` | Buscar colaborador por ID |
-| **PUT** | `/api/v1/users/{id}` | `USER_MANAGE` | Atualizar dados do colaborador |
-| **PUT** | `/api/v1/users/{id}/password` | `USER_MANAGE` | Redefinição de senha com BCrypt |
-| **PATCH**| `/api/v1/users/{id}/status` | `USER_MANAGE` | Bloquear ou desbloquear colaborador |
-| **POST** | `/api/v1/taxonomy/categories` | `CATALOG_WRITE`| Criar categoria de produto |
-| **GET** | `/api/v1/taxonomy/categories` | Pública | Listar categorias do Tenant |
-| **POST** | `/api/v1/taxonomy/authors` | `CATALOG_WRITE`| Cadastrar autor |
-| **GET** | `/api/v1/taxonomy/authors` | Pública | Listar autores |
-| **POST** | `/api/v1/taxonomy/publishers` | `CATALOG_WRITE`| Cadastrar editora |
-| **GET** | `/api/v1/taxonomy/publishers` | Pública | Listar editoras |
-| **POST** | `/api/v1/products` | `CATALOG_WRITE`| Criar Produto Pai com SKUs iniciais opcionais |
-| **PUT** | `/api/v1/products/{id}` | `CATALOG_WRITE`| Atualizar metadados do Produto Pai |
-| **GET** | `/api/v1/products/{id}` | Pública | Buscar produto completo por ID |
-| **GET** | `/api/v1/products/slug/{slug}` | Pública | Buscar produto pelo slug amigável (Loja Pública) |
-| **GET** | `/api/v1/products` | Pública | Pesquisar produtos com filtros facetados e paginação |
-| **DELETE**| `/api/v1/products/{id}` | `CATALOG_WRITE`| Remover produto e SKUs |
-| **POST** | `/api/v1/products/{id}/skus` | `CATALOG_WRITE`| Adicionar SKU/Variação ao produto |
-| **PUT** | `/api/v1/products/skus/{skuId}`| `CATALOG_WRITE`| Atualizar variação |
-| **GET** | `/api/v1/products/skus/{skuId}`| Pública | Buscar SKU por ID |
-| **GET** | `/api/v1/products/skus/barcode/{barcode}`| Pública | Buscar SKU por código de barras (EAN-13) |
-| **GET** | `/api/v1/products/skus/isbn/{isbn}`| Pública | Buscar SKU por ISBN (ISBN-10 ou ISBN-13) |
-| **DELETE**| `/api/v1/products/skus/{skuId}`| `CATALOG_WRITE`| Remover variação |
-| **GET** | `/api/v1/products/skus/{skuId}/stock`| Pública | Saldo de estoque (calcula estoque virtual para kits) |
-| **GET** | `/api/v1/products/skus/{skuId}/fiscal-decomposition`| Pública | Decomposição e rateio proporcional de kit para NF-e/NFC-e |
-| **POST** | `/api/v1/products/{id}/upload-cover-url`| `CATALOG_WRITE`| Gerar presigned URL no S3 para upload de capa |
-| **POST** | `/api/v1/products/skus/{skuId}/upload-ebook-url`| `CATALOG_WRITE`| Gerar presigned URL no S3 para upload de e-book |
-| **GET** | `/api/v1/products/skus/{skuId}/download-ebook-url`| Autenticado | Link temporário de 15 minutos para download de e-book |
-| **POST** | `/api/v1/products/import` | `CATALOG_WRITE`| Importação em streaming de XLSX/CSV com rollback isolado |
-| **POST** | `/api/v1/transfers` | `STOCK_WRITE`| Criar transferência/remessa de estoque para evento ou filial |
-| **GET** | `/api/v1/transfers` | `STOCK_READ` | Listar transferências de estoque (com filtro por filial) |
-| **GET** | `/api/v1/transfers/{id}` | `STOCK_READ` | Obter detalhes de transferência por ID |
-| **POST** | `/api/v1/transfers/{id}/dispatch`| `STOCK_WRITE`| Despachar transferência (status EM_TRANSITO) |
-| **POST** | `/api/v1/transfers/{id}/receive` | `STOCK_WRITE`| Confirmar recebimento com detecção de divergências |
-| **GET** | `/api/v1/transfers/{id}/romaneio`| `STOCK_READ` | Gerar Romaneio formal de transporte e carga |
-| **POST** | `/api/v1/audits` | `STOCK_WRITE`| Criar conferência cega (bipagem pós-evento) |
-| **GET** | `/api/v1/audits` | `STOCK_READ` | Listar conferências cegas de uma empresa/stand |
-| **GET** | `/api/v1/audits/{id}` | `STOCK_READ` | Obter detalhes da conferência cega |
-| **POST** | `/api/v1/audits/{id}/scan` | `STOCK_WRITE`| Bipar código de barras (EAN-13, ISBN ou SKU) |
-| **POST** | `/api/v1/audits/{id}/finalize` | `STOCK_WRITE`| Finalizar contagem da conferência cega |
-| **POST** | `/api/v1/audits/{id}/reconcile`| `STOCK_WRITE`| Conciliar saldos físicos no estoque e ledger contábil |
-| **GET** | `/api/v1/stock/movements` | `STOCK_READ` | Histórico contábil e imutável de estoque (ledger) |
-| **GET** | `/api/v1/events/{companyId}/dashboard`| `STOCK_READ` | Dashboard em tempo real de evento/feira |
+| `GET` | `/api/v1/health` | Pública | Health check com verificação de Virtual Threads |
+| `GET` | `/docs` ou `/documentation` | Pública | Portal HTML interativo de documentação e diagramas UML |
+| `GET` | `/api/v1/auth/tenant-info` | Pública | Resolução visual do Tenant para a tela de login |
+| `POST` | `/api/v1/auth/login` | Pública | Autenticação por credenciais com emissão de Access e Refresh Token |
+| `POST` | `/api/v1/auth/refresh` | Pública | Rotação de Refresh Token com invalidação anterior no Redis |
+| `POST` | `/api/v1/auth/logout` | Autenticado | Inclusão do token na blacklist do Redis e revogação de sessão |
+| `POST` | `/api/v1/tenants` | `SUPER_ADMIN` | Cadastro de novo Tenant |
+| `GET` | `/api/v1/tenants/{id}` | `SUPER_ADMIN` | Buscar Tenant por ID |
+| `GET` | `/api/v1/tenants/slug/{slug}` | `SUPER_ADMIN` | Buscar Tenant por slug |
+| `POST` | `/api/v1/companies` | `TENANT_ADMIN` | Cadastrar filial ou stand de feira/evento |
+| `GET` | `/api/v1/companies/{id}` | Autenticado | Buscar filial por ID |
+| `GET` | `/api/v1/companies/code/{code}` | Autenticado | Buscar filial pelo código mnemônico (ex: MATRIZ) |
+| `GET` | `/api/v1/companies` | Autenticado | Listar todas as filiais do Tenant |
+| `POST` | `/api/v1/users` | `USER_MANAGE` | Criar novo usuário com atribuição de cargo e lojas permitidas |
+| `GET` | `/api/v1/users/me` | Autenticado | Consultar perfil, filiais e permissões do usuário logado |
+| `GET` | `/api/v1/users/{id}` | `USER_MANAGE` | Buscar colaborador por ID |
+| `PUT` | `/api/v1/users/{id}` | `USER_MANAGE` | Atualizar dados do colaborador |
+| `PUT` | `/api/v1/users/{id}/password` | `USER_MANAGE` | Redefinição de senha com hash BCrypt |
+| `PATCH` | `/api/v1/users/{id}/status` | `USER_MANAGE` | Bloquear ou desbloquear colaborador |
+| `POST` | `/api/v1/taxonomy/categories` | `CATALOG_WRITE` | Criar categoria de produto |
+| `GET` | `/api/v1/taxonomy/categories` | Pública | Listar categorias do Tenant |
+| `POST` | `/api/v1/taxonomy/authors` | `CATALOG_WRITE` | Cadastrar autor |
+| `GET` | `/api/v1/taxonomy/authors` | Pública | Listar todos os autores |
+| `POST` | `/api/v1/taxonomy/publishers` | `CATALOG_WRITE` | Cadastrar editora |
+| `GET` | `/api/v1/taxonomy/publishers` | Pública | Listar todas as editoras |
+| `POST` | `/api/v1/products` | `CATALOG_WRITE` | Criar Produto Pai com SKUs iniciais opcionais |
+| `PUT` | `/api/v1/products/{id}` | `CATALOG_WRITE` | Atualizar metadados gerais do Produto Pai |
+| `GET` | `/api/v1/products/{id}` | Pública | Buscar produto completo por ID com variações e autores |
+| `GET` | `/api/v1/products/slug/{slug}` | Pública | Buscar produto pelo slug amigável (Loja Pública / SEO) |
+| `GET` | `/api/v1/products` | Pública | Pesquisar catálogo com filtros facetados e paginação |
+| `DELETE` | `/api/v1/products/{id}` | `CATALOG_WRITE` | Remover produto e todas as suas variações associadas |
+| `POST` | `/api/v1/products/{id}/skus` | `CATALOG_WRITE` | Adicionar SKU/Variação ao produto com dados de frete e fiscais |
+| `PUT` | `/api/v1/products/skus/{skuId}` | `CATALOG_WRITE` | Atualizar variação (SKU) |
+| `GET` | `/api/v1/products/skus/{skuId}` | Pública | Buscar SKU por ID |
+| `GET` | `/api/v1/products/skus/barcode/{barcode}` | Pública | Busca rápida de SKU por código de barras (EAN-13) para PDV |
+| `GET` | `/api/v1/products/skus/isbn/{isbn}` | Pública | Busca de SKU por ISBN com validação de formato |
+| `DELETE` | `/api/v1/products/skus/{skuId}` | `CATALOG_WRITE` | Remover variação |
+| `GET` | `/api/v1/products/skus/{skuId}/stock` | Pública | Saldo disponível por filial (calcula dinamicamente para Kits) |
+| `GET` | `/api/v1/products/skus/{skuId}/fiscal-decomposition` | Pública | Decomposição e rateio proporcional de combo para NF-e/NFC-e |
+| `POST` | `/api/v1/products/{id}/upload-cover-url` | `CATALOG_WRITE` | Gerar URL pré-assinada do S3 para upload direto de capa |
+| `POST` | `/api/v1/products/skus/{skuId}/upload-ebook-url` | `CATALOG_WRITE` | Gerar URL pré-assinada do S3 para upload de arquivo digital |
+| `GET` | `/api/v1/products/skus/{skuId}/download-ebook-url` | Autenticado | Gerar link temporário de download do e-book para cliente autorizado |
+| `POST` | `/api/v1/products/import` | `CATALOG_WRITE` | Upload e importação em streaming de XLSX/CSV com rollback isolado |
+| `POST` | `/api/v1/transfers` | `STOCK_WRITE` | Criar transferência/remessa de estoque para evento ou filial com reserva |
+| `GET` | `/api/v1/transfers` | `STOCK_READ` | Listar transferências de estoque (com filtro opcional por filial) |
+| `GET` | `/api/v1/transfers/{id}` | `STOCK_READ` | Obter detalhes de uma transferência de estoque por ID |
+| `POST` | `/api/v1/transfers/{id}/dispatch` | `STOCK_WRITE` | Despachar transferência de estoque (coloca em trânsito) |
+| `POST` | `/api/v1/transfers/{id}/receive` | `STOCK_WRITE` | Confirmar recebimento com detecção automática de divergência |
+| `GET` | `/api/v1/transfers/{id}/romaneio` | `STOCK_READ` | Gerar Romaneio formal de transporte e carga com pesos cúbicos e fiscais |
+| `POST` | `/api/v1/audits` | `STOCK_WRITE` | Criar conferência cega (bipagem pós-feira ou auditoria física) |
+| `GET` | `/api/v1/audits` | `STOCK_READ` | Listar conferências cegas de uma empresa/stand (`companyId`) |
+| `GET` | `/api/v1/audits/{id}` | `STOCK_READ` | Obter detalhes da conferência cega, itens bipados e divergências |
+| `POST` | `/api/v1/audits/{id}/scan` | `STOCK_WRITE` | Bipar código de barras (EAN-13, ISBN ou SKU) incrementando contagem |
+| `POST` | `/api/v1/audits/{id}/finalize` | `STOCK_WRITE` | Finalizar contagem da conferência cega e fechar período de bipagem |
+| `POST` | `/api/v1/audits/{id}/reconcile` | `STOCK_WRITE` | Conciliar saldos físicos com base nas divergências da conferência no ledger |
+| `GET` | `/api/v1/stock/movements` | `STOCK_READ` | Consultar histórico contábil e imutável de movimentações de estoque (ledger) |
+| `GET` | `/api/v1/events/{companyId}/dashboard` | `STOCK_READ` | Dashboard em tempo real do evento/feira: despachados, faturamento e alertas |
+
+### 3.2. Exemplos de Requisições via cURL
+
+#### 1. Verificar integridade do backend
+```bash
+curl -X GET http://localhost:8080/api/v1/health
+```
+
+#### 2. Autenticar usuário default (Tenant Matriz)
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenantId": "00000000-0000-0000-0000-000000000001",
+    "email": "admin@livrariamatriz.com.br",
+    "password": "Admin@123456"
+  }'
+```
+
+#### 3. Cadastrar um Livro Pai com SKU e ISBN
+```bash
+curl -X POST http://localhost:8080/api/v1/products \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <SEU_JWT_TOKEN>" \
+  -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
+  -d '{
+    "tenantId": "00000000-0000-0000-0000-000000000001",
+    "title": "Clean Code",
+    "slug": "clean-code",
+    "synopsis": "Um guia para o desenvolvimento de software ágil.",
+    "productType": "BOOK",
+    "initialSkus": [
+      {
+        "tenantId": "00000000-0000-0000-0000-000000000001",
+        "skuCode": "LIV-CLEAN-CODE",
+        "barcode": "9788576082675",
+        "isbn": "978-85-7608-267-5",
+        "bindingType": "BROCHURA",
+        "weightGrams": 650,
+        "height": 23.0,
+        "width": 16.0,
+        "depth": 2.5,
+        "price": 89.90,
+        "ncm": "4901.99.00",
+        "cfop": "5102"
+      }
+    ]
+  }'
+```
+
+#### 4. Consultar Rateio Fiscal de um Kit de Livros
+```bash
+curl -X GET "http://localhost:8080/api/v1/products/skus/<SKU_KIT_ID>/fiscal-decomposition?invoicedTotal=150.00"
+```
+
+#### 5. Importar Planilha de Estoque em Lote (Streaming XLSX/CSV)
+```bash
+curl -X POST "http://localhost:8080/api/v1/products/import" \
+  -H "Authorization: Bearer <SEU_JWT_TOKEN>" \
+  -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
+  -F "file=@planilha_livros.csv"
+```
 
 ---
 
-## 6. Portabilidade Twelve-Factor e Deploy
+## 4. Deploy em Produção (VPS Linux)
 
-O backend é agnóstico a provedor e permite deploy direto via Docker Compose ou migração elástica para Amazon Web Services:
+Para implantação em servidor VPS (Ubuntu/Debian), utilize a orquestração `docker-compose.vps.yml`:
 
 ```bash
-# Execução local / Desenvolvimento
-docker compose up -d
+# 1. Configurar variáveis no servidor
+cp .env.example .env
+nano .env  # Configurar DOMAIN_NAME, TRAEFIK_ACME_EMAIL e senhas seguras
 
-# Execução em VPS de Produção (com Traefik e Let's Encrypt)
+# 2. Inicializar os serviços com Traefik, SSL Let's Encrypt e limites de recursos
 docker compose -f docker-compose.vps.yml up -d
-
-# Rotina de Backup Automatizado do PostgreSQL (com rotação de 7 dias)
-./scripts/backup-postgres.sh
 ```
 
+### Rotina de Backup Automatizado do Banco
+O repositório inclui o script [backup-postgres.sh](file:///home/npd/Downloads/projects/e-commerce-livraria/scripts/backup-postgres.sh) com `pg_dump` compactado e rotação automática de 7 dias:
+```bash
+# Adicione ao crontab do servidor para executar diariamente às 03:00 da manhã
+0 3 * * * /opt/ecommerce-backend/scripts/backup-postgres.sh >> /var/log/pg_backup.log 2>&1
+```
+
+---
+
+## 5. Transição Transparente para Nuvem AWS (Fase 2)
+
+O backend possui desacoplamento total de provedor de nuvem via variáveis de ambiente:
+- **Armazenamento:** Para migrar do MinIO para Amazon S3 nativo, remova a variável `AWS_ENDPOINT_URL` e preencha as credenciais AWS IAM. O código Java utiliza `software.amazon.awssdk:s3` sem qualquer alteração.
+- **Banco de Dados:** Aponte `SPRING_DATASOURCE_URL` para o endpoint do Amazon RDS PostgreSQL Multi-AZ.
+- **Cache:** Aponte `SPRING_DATA_REDIS_HOST` para o Amazon ElastiCache Redis.
+
+---
