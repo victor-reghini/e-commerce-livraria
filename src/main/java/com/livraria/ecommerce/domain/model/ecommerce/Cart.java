@@ -44,12 +44,13 @@ public class Cart {
         if (skuId == null) {
             throw new BusinessException("SKU ID é obrigatório para adicionar item ao carrinho.");
         }
-        Optional<CartItem> existing = items.stream().filter(item -> item.getSkuId().equals(skuId)).findFirst();
-        if (existing.isPresent()) {
-            existing.get().addQuantity(quantity);
-        } else {
-            items.add(new CartItem(UUID.randomUUID(), skuId, skuCode, productTitle, quantity, unitPrice));
-        }
+        items.stream()
+                .filter(item -> item.getSkuId().equals(skuId))
+                .findFirst()
+                .ifPresentOrElse(
+                        existing -> existing.addQuantity(quantity),
+                        () -> items.add(new CartItem(UUID.randomUUID(), skuId, skuCode, productTitle, quantity, unitPrice))
+                );
         this.updatedAt = Instant.now();
     }
 

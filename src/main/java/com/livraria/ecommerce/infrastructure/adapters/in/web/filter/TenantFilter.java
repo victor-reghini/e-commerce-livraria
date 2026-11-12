@@ -56,13 +56,12 @@ public class TenantFilter extends OncePerRequestFilter {
             if (TenantContext.getTenantId().isEmpty()) {
                 String host = request.getServerName();
                 if (StringUtils.hasText(host) && !"localhost".equalsIgnoreCase(host) && !"127.0.0.1".equals(host)) {
-                    Optional<Tenant> tenantOptional = tenantRepository.findByDomain(host);
-                    if (tenantOptional.isPresent()) {
-                        UUID tenantId = tenantOptional.get().getId();
+                    tenantRepository.findByDomain(host).ifPresent(tenant -> {
+                        UUID tenantId = tenant.getId();
                         TenantContext.setTenantId(tenantId);
                         MDC.put(MdcLoggingFilter.MDC_TENANT_ID, tenantId.toString());
                         response.setHeader(TENANT_HEADER, tenantId.toString());
-                    }
+                    });
                 }
             }
 

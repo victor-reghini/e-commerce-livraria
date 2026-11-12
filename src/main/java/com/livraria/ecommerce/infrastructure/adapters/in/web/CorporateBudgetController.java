@@ -26,6 +26,7 @@ import java.util.UUID;
 @Tag(name = "Vendas a Prazo e Orçamentos", description = "Gestão de orçamentos corporativos, faturamento a prazo e Trava de Inadimplência")
 public class CorporateBudgetController {
 
+    private static final UUID DEFAULT_TENANT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private final CorporateBudgetUseCase budgetUseCase;
 
     public CorporateBudgetController(CorporateBudgetUseCase budgetUseCase) {
@@ -36,8 +37,7 @@ public class CorporateBudgetController {
         if (headerTenantId != null && !headerTenantId.isBlank()) {
             return UUID.fromString(headerTenantId);
         }
-        return TenantContext.getTenantId()
-                .orElse(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+        return TenantContext.getTenantId().orElse(DEFAULT_TENANT_ID);
     }
 
     @PostMapping

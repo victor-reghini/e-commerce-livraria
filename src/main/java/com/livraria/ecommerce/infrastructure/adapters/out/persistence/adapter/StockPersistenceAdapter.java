@@ -64,26 +64,28 @@ public class StockPersistenceAdapter implements StockRepositoryPort {
     @Override
     @Transactional
     public void setStockQuantity(UUID tenantId, UUID companyId, UUID skuId, int quantity) {
-        Optional<StockItemJpaEntity> existing = stockItemRepository.findByTenantIdAndCompanyIdAndSkuId(tenantId, companyId, skuId);
-        if (existing.isPresent()) {
-            StockItemJpaEntity entity = existing.get();
-            entity.setQuantity(quantity);
-            entity.setUpdatedAt(Instant.now());
-            stockItemRepository.save(entity);
-        } else {
-            StockItemJpaEntity entity = StockItemJpaEntity.builder()
-                    .id(UUID.randomUUID())
-                    .tenantId(tenantId)
-                    .companyId(companyId)
-                    .skuId(skuId)
-                    .quantity(quantity)
-                    .reservedQuantity(0)
-                    .minThreshold(0)
-                    .createdAt(Instant.now())
-                    .updatedAt(Instant.now())
-                    .build();
-            stockItemRepository.save(entity);
-        }
+        stockItemRepository.findByTenantIdAndCompanyIdAndSkuId(tenantId, companyId, skuId)
+                .ifPresentOrElse(
+                        entity -> {
+                            entity.setQuantity(quantity);
+                            entity.setUpdatedAt(Instant.now());
+                            stockItemRepository.save(entity);
+                        },
+                        () -> {
+                            StockItemJpaEntity entity = StockItemJpaEntity.builder()
+                                    .id(UUID.randomUUID())
+                                    .tenantId(tenantId)
+                                    .companyId(companyId)
+                                    .skuId(skuId)
+                                    .quantity(quantity)
+                                    .reservedQuantity(0)
+                                    .minThreshold(0)
+                                    .createdAt(Instant.now())
+                                    .updatedAt(Instant.now())
+                                    .build();
+                            stockItemRepository.save(entity);
+                        }
+                );
     }
 
     @Override
@@ -129,25 +131,27 @@ public class StockPersistenceAdapter implements StockRepositoryPort {
         stockItemRepository.save(origin);
 
         // Increase at destination
-        Optional<StockItemJpaEntity> destOpt = stockItemRepository.findByTenantIdAndCompanyIdAndSkuId(tenantId, destinationCompanyId, skuId);
-        if (destOpt.isPresent()) {
-            StockItemJpaEntity dest = destOpt.get();
-            dest.setQuantity(dest.getQuantity() + quantity);
-            dest.setUpdatedAt(Instant.now());
-            stockItemRepository.save(dest);
-        } else {
-            StockItemJpaEntity dest = StockItemJpaEntity.builder()
-                    .id(UUID.randomUUID())
-                    .tenantId(tenantId)
-                    .companyId(destinationCompanyId)
-                    .skuId(skuId)
-                    .quantity(quantity)
-                    .reservedQuantity(0)
-                    .minThreshold(0)
-                    .createdAt(Instant.now())
-                    .updatedAt(Instant.now())
-                    .build();
-            stockItemRepository.save(dest);
-        }
+        stockItemRepository.findByTenantIdAndCompanyIdAndSkuId(tenantId, destinationCompanyId, skuId)
+                .ifPresentOrElse(
+                        dest -> {
+                            dest.setQuantity(dest.getQuantity() + quantity);
+                            dest.setUpdatedAt(Instant.now());
+                            stockItemRepository.save(dest);
+                        },
+                        () -> {
+                            StockItemJpaEntity dest = StockItemJpaEntity.builder()
+                                    .id(UUID.randomUUID())
+                                    .tenantId(tenantId)
+                                    .companyId(destinationCompanyId)
+                                    .skuId(skuId)
+                                    .quantity(quantity)
+                                    .reservedQuantity(0)
+                                    .minThreshold(0)
+                                    .createdAt(Instant.now())
+                                    .updatedAt(Instant.now())
+                                    .build();
+                            stockItemRepository.save(dest);
+                        }
+                );
     }
 }

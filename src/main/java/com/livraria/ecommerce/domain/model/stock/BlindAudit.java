@@ -47,18 +47,15 @@ public class BlindAudit {
         }
         this.status = AuditStatus.EM_BIPAGEM;
 
-        Optional<BlindAuditItem> existing = items.stream()
+        items.stream()
                 .filter(i -> i.getSkuId().equals(skuId))
-                .findFirst();
-
-        if (existing.isPresent()) {
-            existing.get().incrementScanned(count);
-        } else {
-            BlindAuditItem newItem = new BlindAuditItem(
-                    UUID.randomUUID(), tenantId, id, skuId, skuCode, title, count, 0, count, Instant.now()
-            );
-            this.items.add(newItem);
-        }
+                .findFirst()
+                .ifPresentOrElse(
+                        existing -> existing.incrementScanned(count),
+                        () -> items.add(new BlindAuditItem(
+                                UUID.randomUUID(), tenantId, id, skuId, skuCode, title, count, 0, count, Instant.now()
+                        ))
+                );
     }
 
     public void finalizeAudit() {
