@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentação Técnica & Arquitetura - E-Commerce & PDV Multi-Tenant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            themeVariables: {
+                darkMode: true,
+                background: '#0f172a',
+                primaryColor: '#3b82f6',
+                primaryTextColor: '#f8fafc',
+                primaryBorderColor: '#60a5fa',
+                lineColor: '#94a3b8',
+                secondaryColor: '#1e293b',
+                tertiaryColor: '#0f172a'
+            }
+        });
+    </script>
+    <style>
+        :root {
+            --bg-main: #0b0f19;
+            --bg-card: #131b2e;
+            --bg-card-hover: #1a243d;
+            --border-color: #23304d;
+            --primary: #3b82f6;
+            --primary-glow: rgba(59, 130, 246, 0.25);
+            --secondary: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --code-bg: #090d16;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            line-height: 1.6;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 300px;
+            background-color: #0d1322;
+            border-right: 1px solid var(--border-color);
+            padding: 24px 16px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 24px;
+        }
+
+        .sidebar-brand .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 20px;
+            color: white;
+            box-shadow: 0 4px 12px var(--primary-glow);
+        }
+
+        .sidebar-brand h2 {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .sidebar-brand p {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .nav-group-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: #64748b;
+            margin: 20px 8px 8px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            color: white;
+            background-color: var(--bg-card);
+            border-left: 3px solid var(--primary);
+        }
+
+        /* Main Content */
+        .content {
+            flex: 1;
+            padding: 32px 48px;
+            max-width: 1400px;
+            overflow-x: hidden;
+        }
+
+        .header {
+            margin-bottom: 40px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            background: linear-gradient(120deg, #ffffff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        .header-links {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+
+        .btn-outline {
+            border-color: var(--border-color);
+            background-color: var(--bg-card);
+            color: var(--text-main);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--primary);
+            color: white;
+        }
+
+        /* Section Cards */
+        .section-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            margin-bottom: 32px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 20px;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+
+        .diagram-container {
+            background-color: #0b0f19;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 18px 0;
+            overflow-x: auto;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* API Table */
+        .table-responsive {
+            overflow-x: auto;
+            margin-top: 16px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #0d1322;
+            color: #94a3b8;
+            padding: 12px 16px;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        .method-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: 'Fira Code', monospace;
+            text-transform: uppercase;
+        }
+
+        .method-get { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .method-post { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .method-put { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .method-patch { background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); }
+        .method-delete { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+        .endpoint-path {
+            font-family: 'Fira Code', monospace;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .badge-auth {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            background-color: #1e293b;
+            color: #cbd5e1;
+            font-weight: 600;
+        }
+
+        .badge-public {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            background-color: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            font-weight: 600;
+        }
+
+        code, pre {
+            font-family: 'Fira Code', monospace;
+        }
+
+        code {
+            background-color: var(--code-bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid var(--border-color);
+            color: #38bdf8;
+        }
+
+        /* Tab Switcher */
+        .tabs {
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 24px;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .flow-step-list {
+            margin: 12px 0 16px 20px;
+        }
+
+        .flow-step-list li {
+            margin-bottom: 8px;
+            color: #cbd5e1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="logo">L</div>
+            <div>
+                <h2>Plataforma Livraria</h2>
+                <p>Doc & UML Viva</p>
+            </div>
+        </div>
+
+        <div class="nav-group-title">Navegação Rápida</div>
+        <a href="#arquitetura" class="nav-link active">🏛️ Visão & Arquitetura</a>
+        <a href="#uml-classes" class="nav-link">📦 Diagrama de Classes</a>
+        <a href="#uml-er" class="nav-link">🗄️ Diagrama ER & RLS</a>
+        <a href="#uml-sequencia" class="nav-link">⚡ Fluxos & Sequência</a>
+        <a href="#endpoints" class="nav-link">📡 Catálogo de Endpoints</a>
+        <a href="#regras-negocio" class="nav-link">⚖️ Regras de Negócio</a>
+        <a href="#infraestrutura" class="nav-link">🐳 Infraestrutura & Deploy</a>
+
+        <div class="nav-group-title">Links Externos</div>
+        <a href="/swagger-ui.html" target="_blank" class="nav-link">📑 Swagger UI</a>
+        <a href="/v3/api-docs" target="_blank" class="nav-link">📄 OpenAPI JSON</a>
+        <a href="/actuator/prometheus" target="_blank" class="nav-link">📊 Métricas Prometheus</a>
+        <a href="/api/v1/health" target="_blank" class="nav-link">❤️ Health Check</a>
+    </aside>
+
+    <!-- Main Content Body -->
+    <main class="content">
+        <header class="header">
+            <div>
+                <h1>Documentação Técnica da API & Arquitetura UML</h1>
+                <p>Especificação Completa de Engenharia de Software — Plataforma de E-Commerce, PDV e Gestão Multi-Tenant</p>
+            </div>
+            <div class="header-links">
+                <a href="/swagger-ui.html" target="_blank" class="btn btn-outline">Swagger UI</a>
+                <a href="/api/v1/health" target="_blank" class="btn btn-primary">Health Status</a>
+            </div>
+        </header>
+
+        <!-- 1. Visão Arquitetural -->
+        <section id="arquitetura" class="section-card">
+            <h2 class="section-title">1. Visão Geral e Arquitetura do Sistema (3 Camadas)</h2>
+            <p style="color: #cbd5e1; margin-bottom: 16px;">
+                A plataforma substitui o legado monolítico WordPress/WooCommerce por uma arquitetura distribuída, headless e multi-tenant com isolamento lógico via Row-Level Security no PostgreSQL 16. O backend adota a <strong>Arquitetura Hexagonal (Ports & Adapters)</strong> com <strong>Virtual Threads (Project Loom)</strong> no Java 21 LTS e Spring Boot 3.3.5.
+            </p>
+
+            <div class="diagram-container">
+                <div class="mermaid">
+flowchart TB
+    subgraph Frontend["1. Camada Frontend (React 19 / Next.js)"]
+        Loja["Loja Pública (Next.js SSR)"]
+        PDV["PDV Mobile PWA (Barcode / Câmera)"]
+        Admin["Painel Admin SPA (Gestão & Feiras)"]
+    end
+
+    subgraph Traefik["Proxy Reverso & SSL (Portátil VPS)"]
+        Trf["Traefik v3 (Let's Encrypt / Auto-SSL)"]
+    end
+
+    subgraph Backend["2. Camada Backend (Java 21 LTS / Spring Boot 3.3.5)"]
+        direction TB
+        Filtros["Filtros HTTP (TenantFilter, MdcLoggingFilter, JwtFilter)"]
+        API["REST Controllers (Inbound Adapters)"]
+        UseCases["Inbound Ports & Application Services (Loom Threads)"]
+        Domain["Domain Core (Entities, Enums, Validators, Fiscal Rateio)"]
+        OutPorts["Outbound Ports (Repository, Storage, Messaging)"]
+        Adapters["Outbound Adapters (JPA, Redis, RabbitMQ, S3)"]
+
+        Filtros --> API --> UseCases --> Domain
+        UseCases --> OutPorts --> Adapters
+    end
+
+    subgraph Storage["3. Armazenamento & Mensageria"]
+        PG[("PostgreSQL 16 (RLS Ativado)")]
+        RD[("Redis 7 (Tokens & Cache)")]
+        RMQ[("RabbitMQ 3 (Filas Fiscais)")]
+        S3[("MinIO S3 (Capas & E-books)")]
+    end
+
+    Frontend -->|HTTPS| Trf
+    Trf -->|Reverse Proxy| Backend
+    Adapters -->|SET LOCAL app.current_tenant| PG
+    Adapters -->|Blacklist & Tokens| RD
+    Adapters -->|Async Jobs| RMQ
+    Adapters -->|Presigned URLs| S3
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. Diagrama de Classes UML -->
+        <section id="uml-classes" class="section-card">
+            <h2 class="section-title">2. Diagrama de Classes de Domínio (UML Class Diagram)</h2>
+            <p style="color: #cbd5e1; margin-bottom: 16px;">
+                Representação estrita das entidades de domínio puro (sem acoplamento a frameworks), demonstrando a composição de Produto Pai, Variações (SKUs), Kits com Estoque Virtual Dinâmico e Tratamento Fiscal.
+            </p>
+
+            <div class="diagram-container">
+                <div class="mermaid">
+classDiagram
+    class Tenant {
+        +UUID id
+        +String slug
+        +String name
+        +String cnpj
+        +TenantStatus status
+        +Map settings
+    }
+
+    class Company {
+        +UUID id
+        +UUID tenantId
+        +String code
+        +String name
+        +TaxRegime taxRegime
+        +boolean headquarters
+        +Address address
+    }
+
+    class User {
+        +UUID id
+        +UUID tenantId
+        +String email
+        +String passwordHash
+        +UserRole role
+        +List~UUID~ allowedCompanyIds
+        +boolean hasCompanyAccess(UUID companyId)
+    }
+
+    class Product {
+        +UUID id
+        +UUID tenantId
+        +UUID categoryId
+        +UUID publisherId
+        +String title
+        +String slug
+        +ProductType productType
+        +boolean active
+        +List~ProductAuthor~ authors
+        +List~Sku~ skus
+        +addSku(Sku sku)
+        +removeSku(UUID skuId)
+        +addAuthor(UUID authorId, AuthorRole role)
+        +getPrimarySku() Sku
+    }
+
+    class Sku {
+        +UUID id
+        +UUID tenantId
+        +UUID productId
+        +String skuCode
+        +String barcode
+        +String isbn
+        +BindingType bindingType
+        +int weightGrams
+        +Dimensions dimensions
+        +BigDecimal price
+        +BigDecimal promotionalPrice
+        +String ncm
+        +String cfop
+        +List~BundleItem~ bundleItems
+        +EbookMetadata ebookMetadata
+        +boolean isBundle()
+        +boolean isEbook()
+        +calculateVirtualStock(Map stockMap) int
+        +decomposeBundleForFiscal(BigDecimal invoicedTotal) List~FiscalDecompositionItem~
+    }
+
+    class BundleItem {
+        +UUID id
+        +UUID bundleSkuId
+        +UUID itemSkuId
+        +int quantity
+        +BundleType bundleType
+        +BigDecimal discountPercentage
+    }
+
+    class Dimensions {
+        +double height
+        +double width
+        +double depth
+        +cubicVolume() double
+    }
+
+    class IsbnValidator {
+        +clean(String isbn)$ String
+        +isValid(String isbn)$ boolean
+    }
+
+    class FiscalDecompositionItem {
+        +UUID skuId
+        +String skuCode
+        +int quantity
+        +BigDecimal originalUnitPrice
+        +BigDecimal proportionalUnitPrice
+        +BigDecimal proportionalTotal
+        +String ncm
+        +String cfop
+    }
+
+    Tenant "1" --> "*" Company : possui filiais
+    Tenant "1" --> "*" User : possui colaboradores
+    Tenant "1" --> "*" Product : cataloga
+    Product "1" --> "*" Sku : variações
+    Sku "1" --> "*" BundleItem : itens compostos
+    Sku "1" --> "1" Dimensions : medidas frete
+    Sku ..> FiscalDecompositionItem : decompõe em
+    Sku ..> IsbnValidator : valida
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. Diagrama Entidade-Relacionamento (ER) com RLS -->
+        <section id="uml-er" class="section-card">
+            <h2 class="section-title">3. Diagrama Entidade-Relacionamento (ER) & Row-Level Security</h2>
+            <p style="color: #cbd5e1; margin-bottom: 16px;">
+                Todas as tabelas que contêm <code>tenant_id</code> possuem <strong>Row-Level Security forçado</strong> (<code>FORCE ROW LEVEL SECURITY</code>), garantindo vazamento zero entre múltiplos lojistas a nível de kernel do banco de dados.
+            </p>
+
+            <div class="diagram-container">
+                <div class="mermaid">
+erDiagram
+    tenants ||--o{ tenant_domains : "possui dominios"
+    tenants ||--o{ companies : "possui filiais"
+    tenants ||--o{ users : "possui usuarios"
+    companies ||--o{ user_companies : "vincula"
+    users ||--o{ user_companies : "pertence a"
+    roles ||--o{ role_permissions : "contem permissoes"
+    permissions ||--o{ role_permissions : "atribuidas a"
+
+    tenants ||--o{ categories : "RLS protegido"
+    tenants ||--o{ authors : "RLS protegido"
+    tenants ||--o{ publishers : "RLS protegido"
+    tenants ||--o{ products : "RLS protegido"
+    categories ||--o{ products : "classifica"
+    publishers ||--o{ products : "publica"
+    products ||--o{ product_authors : "autoria"
+    authors ||--o{ product_authors : "escreveu"
+
+    products ||--o{ skus : "possui variacoes"
+    skus ||--o{ bundle_items : "itens do kit"
+    skus ||--o| ebook_metadata : "arquivo digital"
+    skus ||--o{ product_images : "fotos"
+    companies ||--o{ stock_items : "saldo fisico"
+    skus ||--o{ stock_items : "estoque por filial"
+
+    tenants {
+        uuid id PK
+        varchar slug UK
+        varchar name
+        varchar cnpj UK
+        varchar status
+        jsonb settings_json
+    }
+
+    companies {
+        uuid id PK
+        uuid tenant_id FK
+        varchar code
+        varchar name
+        varchar tax_regime
+        boolean is_headquarters
+    }
+
+    products {
+        uuid id PK
+        uuid tenant_id FK
+        uuid category_id FK
+        uuid publisherId FK
+        varchar title
+        varchar slug UK
+        varchar product_type
+        boolean active
+    }
+
+    skus {
+        uuid id PK
+        uuid tenant_id FK
+        uuid product_id FK
+        varchar sku_code UK
+        varchar barcode
+        varchar isbn
+        varchar binding_type
+        numeric price
+        numeric cost_price
+        varchar ncm
+        varchar cfop
+    }
+
+    bundle_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid bundle_sku_id FK
+        uuid item_sku_id FK
+        int quantity
+        varchar bundle_type
+    }
+
+    stock_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid sku_id FK
+        int quantity
+        int reserved_quantity
+    }
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. Diagramas de Sequência (Fluxos e Regras) -->
+        <section id="uml-sequencia" class="section-card">
+            <h2 class="section-title">4. Diagramas de Sequência dos Principais Fluxos Operacionais</h2>
+
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('seq-tenancy', this)">1. Multi-Tenancy & RLS</button>
+                <button class="tab-btn" onclick="switchTab('seq-auth', this)">2. Autenticação & Rotação</button>
+                <button class="tab-btn" onclick="switchTab('seq-virtual-stock', this)">3. Estoque Virtual de Kits</button>
+                <button class="tab-btn" onclick="switchTab('seq-fiscal', this)">4. Rateio Fiscal de Combo</button>
+                <button class="tab-btn" onclick="switchTab('seq-import', this)">5. Importação em Lote</button>
+                <button class="tab-btn" onclick="switchTab('seq-s3', this)">6. S3 Presigned URLs</button>
+            </div>
+
+            <!-- Tab 1: Tenancy -->
+            <div id="seq-tenancy" class="tab-content active">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Fluxo de Injeção de Sessão RLS no HikariCP:</strong> Toda conexão extrai o TenantID da requisição e aplica <code>SET LOCAL app.current_tenant</code> garantindo isolamento total a nível de banco.</p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Client as Cliente / React Frontend
+    participant Filter as TenantFilter & MdcFilter
+    participant Context as TenantContext (ThreadLocal)
+    participant DataSource as TenantAwareDataSource
+    participant DB as PostgreSQL 16 (RLS Kernel)
+
+    Client->>Filter: Requisição HTTP (Header X-Tenant-ID / Subdomínio / JWT)
+    Filter->>Context: setTenantId(uuid)
+    Filter->>Filter: MDC.put("tenant_id", uuid)
+    Filter->>DataSource: Executa consulta JPA / SQL
+    DataSource->>DB: Obter conexão do HikariPool
+    DataSource->>DB: SELECT set_config('app.current_tenant', :tenantId, false)
+    DataSource->>DB: Executa SELECT / INSERT / UPDATE
+    DB-->>DB: Filtra automaticamente via POLICY: USING (tenant_id = current_app_tenant())
+    DB-->>DataSource: Retorna apenas registros pertencentes ao Tenant ativo
+    DataSource-->>Client: Resposta isolada e segura
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Auth -->
+            <div id="seq-auth" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Autenticação JWT, Resolução RBAC e Rotação de Refresh Token no Redis:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User as Operador / Administrador
+    participant AuthCtrl as AuthController
+    participant AuthService as AuthService
+    participant UserRepo as UserRepositoryPort
+    participant Redis as Redis 7 Cache
+    participant JWT as JwtTokenProvider
+
+    User->>AuthCtrl: POST /api/v1/auth/login {tenantId, email, password}
+    AuthCtrl->>AuthService: authenticate(tenantId, email, password)
+    AuthService->>UserRepo: findByEmail(tenantId, email)
+    UserRepo-->>AuthService: User com PasswordHash BCrypt e Roles
+    AuthService->>AuthService: BCrypt.checkpw(password, hash)
+    AuthService->>JWT: generateAccessToken(user, authorities)
+    AuthService->>JWT: generateRefreshToken(user)
+    AuthService->>Redis: Salva RefreshToken com TTL (7 dias)
+    AuthService-->>AuthCtrl: AuthResponse {accessToken, refreshToken}
+    AuthCtrl-->>User: 200 OK + Tokens
+
+    Note over User,Redis: Rotação de Token (Refresh Token Rotation)
+    User->>AuthCtrl: POST /api/v1/auth/refresh {refreshToken}
+    AuthCtrl->>AuthService: refreshToken(token)
+    AuthService->>Redis: Verifica existência e invalida token anterior
+    AuthService->>JWT: Gera novo par Access + Refresh Token
+    AuthService->>Redis: Registra novo Refresh Token
+    AuthService-->>User: 200 OK + Novo Par de Tokens
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: Virtual Stock -->
+            <div id="seq-virtual-stock" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Cálculo do Saldo Virtual de Kits e Combos Dinâmicos:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Caixa as PDV Balcão / Loja Online
+    participant ProdCtrl as ProductController
+    participant CatalogService as CatalogService
+    participant SkuRepo as SkuRepositoryPort
+    participant StockRepo as StockRepositoryPort
+
+    Caixa->>ProdCtrl: GET /api/v1/products/skus/{skuId}/stock?companyId={filialId}
+    ProdCtrl->>CatalogService: calculateAvailableStock(tenantId, companyId, skuId)
+    CatalogService->>SkuRepo: findById(skuId)
+    SkuRepo-->>CatalogService: Sku (isBundle = true, BundleItems = [ItemA(qty=2), ItemB(qty=1)])
+    CatalogService->>StockRepo: findAvailableStockBySkuIds(filialId, [ItemA, ItemB])
+    StockRepo-->>CatalogService: Map {ItemA: 10 unid, ItemB: 4 unid}
+    CatalogService->>CatalogService: sku.calculateVirtualStock(): min(10/2=5, 4/1=4) = 4
+    CatalogService-->>ProdCtrl: Retorna saldo disponível = 4 kits
+    ProdCtrl-->>Caixa: 200 OK: 4
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 4: Fiscal Rateio -->
+            <div id="seq-fiscal" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Motor de Rateio e Decomposição Fiscal de Kits para NF-e/NFC-e:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Fiscal as Motor de Faturamento (SEFAZ)
+    participant Ctrl as ProductController
+    participant Service as CatalogService
+    participant Sku as Sku Domain Model
+
+    Fiscal->>Ctrl: GET /api/v1/products/skus/{skuId}/fiscal-decomposition?invoicedTotal=180.00
+    Ctrl->>Service: decomposeBundle(skuId, 180.00)
+    Service->>Sku: decomposeBundleForFiscal(180.00)
+    Note over Sku: Original A: R$ 89,90 | Original B: R$ 129,90<br/>Fator = 180,00 / (89,90 + 129,90)<br/>Pondera proporcional de centavos e reconcilia sobra na última linha
+    Sku-->>Service: List de FiscalDecompositionItem:<br/>[Item A: R$ 73,62 (NCM 4901.99.00), Item B: R$ 106,38 (NCM 4901.99.00)]
+    Service-->>Ctrl: Lista de itens decompostos
+    Ctrl-->>Fiscal: 200 OK (Soma fecha perfeitamente em R$ 180,00)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 5: Import -->
+            <div id="seq-import" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Módulo de Importação em Lote via Streaming com Rollback Isolado:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Admin as Gestor da Livraria
+    participant Ctrl as ProductController
+    participant Batch as BatchImportService
+    participant Parser as Apache POI / Commons CSV Streaming
+    participant Tx as TransactionTemplate (Rollback Isolado)
+    participant DB as Banco de Dados
+
+    Admin->>Ctrl: POST /api/v1/products/import (Multipart File XLSX/CSV)
+    Ctrl->>Batch: importSpreadsheet(tenantId, companyId, inputStream, fileName)
+    Batch->>Parser: Inicia leitura em streaming linha a linha
+    Parser-->>Batch: Agrupa em chunks de 500 registros
+    loop Para cada linha do chunk
+        Batch->>Tx: execute(status -> importaRegistro)
+        alt Linha Válida
+            Tx->>DB: Salva Categoria, Autor, Editora, Produto, SKU e Saldo
+            Tx-->>Batch: Sucesso (successCount++)
+        else Linha com Erro (ex: ISBN Inválido)
+            Tx->>DB: Executa Rollback apenas desta linha
+            Tx-->>Batch: Registra erro em List<BatchImportRowError> (failureCount++)
+        end
+    end
+    Batch-->>Ctrl: BatchImportResult {total: 1000, sucesso: 998, falhas: 2, errors: [...]}
+    Ctrl-->>Admin: 200 OK + Relatório de Auditoria
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 6: S3 Presigned -->
+            <div id="seq-s3" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Upload e Download Seguro via Presigned URLs (MinIO S3 / AWS S3):</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User as Usuário / Cliente
+    participant Backend as Backend Java (Spring Boot)
+    participant Storage as S3StorageAdapter (S3Presigner)
+    participant S3 as MinIO S3 / Amazon S3
+
+    Note over User,S3: Fluxo de Upload Direto de Capa ou E-book
+    User->>Backend: POST /api/v1/products/{id}/upload-cover-url?fileName=capa.jpg
+    Backend->>Storage: generatePresignedUploadUrl(bucket, key, 15 min)
+    Storage-->>Backend: URL assinada com SigV4
+    Backend-->>User: 200 OK {uploadUrl, s3Key, expiresInSeconds: 900}
+    User->>S3: PUT [uploadUrl] (Binário da imagem direto ao Storage)
+    S3-->>User: 200 OK (Sem sobrecarga de banda no backend)
+
+    Note over User,S3: Fluxo de Download Seguro de E-book Autorizado
+    User->>Backend: GET /api/v1/products/skus/{skuId}/download-ebook-url
+    Backend->>Backend: Valida compra autorizada do cliente
+    Backend->>Storage: generatePresignedDownloadUrl(bucket, key, 15 min)
+    Storage-->>Backend: URL assinada temporária
+    Backend-->>User: Retorna link temporário para download
+    User->>S3: GET [downloadUrl] (Baixa arquivo EPUB/PDF)
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. Catálogo Completo de Endpoints REST -->
+        <section id="endpoints" class="section-card">
+            <h2 class="section-title">5. Catálogo Completo de Endpoints da API</h2>
+            <p style="color: #cbd5e1;">Todos os endpoints implementados no backend, incluindo permissões granulares de acesso, headers e parâmetros:</p>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Método</th>
+                            <th>Endpoint</th>
+                            <th>Autorização / Permissão</th>
+                            <th>Descrição & Contrato</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Saúde & Docs -->
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/health</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Status do sistema, tempo de resposta e verificação das Virtual Threads (Loom).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/docs</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Portal interativo de documentação técnica, arquitetura e diagramas UML.</td>
+                        </tr>
+                        <!-- Auth -->
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/auth/tenant-info</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Resolução pública de dados visuais do lojista (logo, cores, nome) para a tela de login.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/auth/login</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Autenticação por credenciais com emissão de par de Access Token (JWT) e Refresh Token.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/auth/refresh</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Rotação de token: invalida o Refresh Token anterior no Redis e emite um novo par de tokens.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/auth/logout</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Revogação de sessão e inclusão do token ativo na blacklist do Redis até expiração.</td>
+                        </tr>
+                        <!-- Tenants -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/tenants</td>
+                            <td><span class="badge-auth">SUPER_ADMIN</span></td>
+                            <td>Provisionamento de um novo Tenant (Lojista) com slug, dados fiscais e configurações.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/tenants/{id}</td>
+                            <td><span class="badge-auth">SUPER_ADMIN</span></td>
+                            <td>Consulta de detalhes administrativos do Tenant por ID.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/tenants/slug/{slug}</td>
+                            <td><span class="badge-auth">SUPER_ADMIN</span></td>
+                            <td>Consulta de Tenant através do slug identificador.</td>
+                        </tr>
+                        <!-- Empresas / Filiais -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/companies</td>
+                            <td><span class="badge-auth">TENANT_ADMIN</span></td>
+                            <td>Cadastro de empresa, filial física ou stand de evento/feira com regime tributário.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/companies/{id}</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Buscar filial por ID com validação de vínculo do usuário ativo.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/companies/code/{code}</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Buscar filial pelo código mnemônico (ex: MATRIZ, BIENAL-SP).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/companies</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Listar todas as filiais e stands cadastrados no Tenant.</td>
+                        </tr>
+                        <!-- Usuários & RBAC -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/users</td>
+                            <td><span class="badge-auth">USER_MANAGE</span></td>
+                            <td>Criar novo usuário com atribuição de cargo e lojas permitidas (<code>user_companies</code>).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/users/me</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Consultar dados cadastrais, cargo, filiais permitidas e authorities do usuário logado.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/users/{id}</td>
+                            <td><span class="badge-auth">USER_MANAGE</span></td>
+                            <td>Consultar colaborador específico por ID.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-put">PUT</span></td>
+                            <td class="endpoint-path">/api/v1/users/{id}</td>
+                            <td><span class="badge-auth">USER_MANAGE</span></td>
+                            <td>Atualizar perfil, papel (Role) e vínculo de lojas do colaborador.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-put">PUT</span></td>
+                            <td class="endpoint-path">/api/v1/users/{id}/password</td>
+                            <td><span class="badge-auth">USER_MANAGE / PROPRIETÁRIO</span></td>
+                            <td>Redefinição segura de senha com hash BCrypt.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-patch">PATCH</span></td>
+                            <td class="endpoint-path">/api/v1/users/{id}/status</td>
+                            <td><span class="badge-auth">USER_MANAGE</span></td>
+                            <td>Bloquear ou desbloquear acesso do colaborador.</td>
+                        </tr>
+                        <!-- Taxonomia -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/taxonomy/categories</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Criar categoria de produto com suporte a hierarquia de pais/filhos.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/taxonomy/categories</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Listar árvore de categorias cadastradas no Tenant.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/taxonomy/authors</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Cadastrar autor com biografia.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/taxonomy/authors</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Listar todos os autores cadastrados no Tenant.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/taxonomy/publishers</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Cadastrar editora.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/taxonomy/publishers</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Listar todas as editoras do catálogo.</td>
+                        </tr>
+                        <!-- Produtos e SKUs -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/products</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Criar Produto Pai com título, sinopse, autores, categorias e SKUs iniciais.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-put">PUT</span></td>
+                            <td class="endpoint-path">/api/v1/products/{id}</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Atualizar dados gerais do Produto Pai e autores vinculados.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/products/{id}</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Buscar produto completo por ID com todas as suas variações de SKUs.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/products/slug/{slug}</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Buscar produto pelo slug amigável para renderização SEO na Loja Pública.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/products</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Pesquisar catálogo com filtros facetados (termo de busca, categoria, editora, paginação).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-delete">DELETE</span></td>
+                            <td class="endpoint-path">/api/v1/products/{id}</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Remover produto e todas as suas variações associadas.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/products/{id}/skus</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Adicionar nova variação (SKU) a um produto pai com preços, dimensões, ISBN e NCM.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-put">PUT</span></td>
+                            <td class="endpoint-path">/api/v1/products/skus/{skuId}</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Atualizar atributos Variant de um SKU existente.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/products/skus/{skuId}</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Consultar dados detalhados de uma variação.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/products/skus/barcode/{barcode}</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Busca rápida de SKU por EAN-13 para PDV e leitores de código de barras.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/products/skus/isbn/{isbn}</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Busca rápida de SKU pelo ISBN (com sanitização e validação de 10 ou 13 dígitos).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-delete">DELETE</span></td>
+                            <td class="endpoint-path">/api/v1/products/skus/{skuId}</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Remover uma variação específica.</td>
+                        </tr>
+                        <!-- Estoque e Kits -->
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/products/skus/{skuId}/stock</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Saldo disponível por filial. Para Kits Virtuais, calcula dinamicamente pelo menor componente.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/products/skus/{skuId}/fiscal-decomposition</td>
+                            <td><span class="badge-public">PÚBLICO</span></td>
+                            <td>Decompõe o kit proporcionalmente com rateio de centavos, NCM e CFOP para emissão fiscal.</td>
+                        </tr>
+                        <!-- Mídias S3 -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/products/{id}/upload-cover-url</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Gera URL pré-assinada do S3/MinIO para upload direto da capa do livro.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/products/skus/{skuId}/upload-ebook-url</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Gera URL pré-assinada do S3 para upload seguro de arquivo digital de e-book.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/products/skus/{skuId}/download-ebook-url</td>
+                            <td><span class="badge-auth">AUTENTICADO</span></td>
+                            <td>Gera link temporário de 15 minutos para download do e-book por cliente autorizado.</td>
+                        </tr>
+                        <!-- Importação em Lote -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/products/import</td>
+                            <td><span class="badge-auth">CATALOG_WRITE</span></td>
+                            <td>Upload de arquivo XLSX ou CSV para importação em streaming (chunks de 500) com rollback isolado.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 6. Regras de Negócio e Invariantes -->
+        <section id="regras-negocio" class="section-card">
+            <h2 class="section-title">6. Principais Regras de Negócio & Invariantes de Domínio</h2>
+            <ul class="flow-step-list">
+                <li><strong>Isolamento Multi-Tenant Inviolável:</strong> Nenhuma instrução SQL pode ser executada sem a definição do identificador do Tenant na sessão do PostgreSQL (<code>SET LOCAL app.current_tenant</code>). Em caso de ausência, as políticas de RLS retornam conjunto vazio de dados.</li>
+                <li><strong>Validação Internacional de ISBN:</strong> Todo ISBN cadastrado no SKU é sanitizado e submetido aos algoritmos ponderados de módulo 11 (ISBN-10 com suporte ao dígito 'X') ou módulo 10 (ISBN-13 com prefixos 978/979).</li>
+                <li><strong>Disponibilidade Virtual de Kits Dinâmicos:</strong> O estoque de um combo não é fixo; ele reflete em tempo real o gargalo de seus componentes unitários (<code>disponibilidade = min(saldo_item / qtd_necessaria)</code>).</li>
+                <li><strong>Reconciliação Centesimal Fiscal:</strong> O faturamento de kits não pode sofrer distorções de dízimas periódicas. O motor acumula os centavos rateados e equaliza o arredondamento na última linha do combo, garantindo paridade exata com o valor total faturado no documento fiscal.</li>
+                <li><strong>Tolerância a Falhas na Importação:</strong> Uma inconsistência em uma linha de planilha não invalida o arquivo todo. Chunks de 500 registros isolam transações individualmente, registrando logs detalhados de erros enquanto processam o restante do catálogo.</li>
+            </ul>
+        </section>
+
+        <!-- 7. Infraestrutura & Portabilidade Twelve-Factor -->
+        <section id="infraestrutura" class="section-card">
+            <h2 class="section-title">7. Infraestrutura, Portabilidade e Transição para Nuvem AWS</h2>
+            <p style="color: #cbd5e1; margin-bottom: 16px;">
+                O ecossistema adota os princípios do <strong>Twelve-Factor App</strong>, permitindo que a aplicação execute na VPS Linux com containers Docker e migre para a AWS em grande escala sem alterar nenhuma linha de código Java:
+            </p>
+
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Componente</th>
+                            <th>Fase 1: Produção Inicial (VPS Linux)</th>
+                            <th>Fase 2: Escala Elástica (Amazon Web Services)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Roteamento & SSL</strong></td>
+                            <td>Traefik v3 com Let's Encrypt automático para domínios próprios e subdomínios dos tenants.</td>
+                            <td>AWS Application Load Balancer + CloudFront CDN + Certificados ACM + AWS WAF.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Banco de Dados</strong></td>
+                            <td>PostgreSQL 16 com volume persistente no host e backups rotativos diários (<code>pg_dump</code>).</td>
+                            <td>Amazon RDS PostgreSQL Multi-AZ com réplicas de leitura e backup contínuo Point-in-Time.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cache & Sessões</strong></td>
+                            <td>Redis 7 containerizado com persistência RDB/AOF para controle de blacklist de tokens.</td>
+                            <td>Amazon ElastiCache Redis com clustering e failover automático.</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Armazenamento S3</strong></td>
+                            <td>MinIO (S3-compatible) containerizado localmente com buckets pré-configurados.</td>
+                            <td>Amazon S3 nativo (basta apontar <code>AWS_ENDPOINT_URL</code> e IAM credentials).</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Mensageria</strong></td>
+                            <td>RabbitMQ 3 com plugin de management ativo para desacoplamento de emissões fiscais.</td>
+                            <td>Amazon MQ (Managed RabbitMQ) ou Amazon SQS/SNS para escalabilidade de eventos.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        function switchTab(tabId, element) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            element.classList.add('active');
+        }
+    </script>
+</body>
+</html>
+

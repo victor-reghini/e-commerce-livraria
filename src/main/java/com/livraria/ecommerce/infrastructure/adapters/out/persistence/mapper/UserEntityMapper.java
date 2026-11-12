@@ -4,10 +4,18 @@ import com.livraria.ecommerce.domain.model.user.User;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.entity.UserJpaEntity;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+
 @Component
 public class UserEntityMapper {
 
     public User toDomain(UserJpaEntity entity) {
+        return toDomain(entity, Collections.emptyList());
+    }
+
+    public User toDomain(UserJpaEntity entity, List<UUID> companyIds) {
         if (entity == null) {
             return null;
         }
@@ -20,6 +28,7 @@ public class UserEntityMapper {
                 entity.getPasswordHash(),
                 entity.getRole(),
                 entity.isActive(),
+                companyIds != null ? companyIds : Collections.emptyList(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
@@ -43,4 +52,3 @@ public class UserEntityMapper {
         );
     }
 }
-

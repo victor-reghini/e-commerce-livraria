@@ -49,6 +49,7 @@ public class TenantJpaEntity {
     @Column(name = "status", nullable = false, length = 32)
     private TenantStatus status;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "settings_json", columnDefinition = "jsonb")
     private String settingsJson;
 

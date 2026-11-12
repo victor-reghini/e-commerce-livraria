@@ -50,4 +50,3 @@ class UserTest {
         assertTrue(user.isActive());
     }
 }
-

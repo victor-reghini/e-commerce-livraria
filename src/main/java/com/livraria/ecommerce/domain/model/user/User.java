@@ -1,6 +1,9 @@
 package com.livraria.ecommerce.domain.model.user;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -13,11 +16,12 @@ public class User {
     private String passwordHash;
     private UserRole role;
     private boolean active;
+    private List<UUID> companyIds;
     private final Instant createdAt;
     private Instant updatedAt;
 
     public User(UUID id, UUID tenantId, String name, String email, String passwordHash,
-                UserRole role, boolean active, Instant createdAt, Instant updatedAt) {
+                UserRole role, boolean active, List<UUID> companyIds, Instant createdAt, Instant updatedAt) {
         this.id = Objects.requireNonNullElseGet(id, UUID::randomUUID);
         this.tenantId = Objects.requireNonNull(tenantId, "Tenant ID é obrigatório");
         this.name = Objects.requireNonNull(name, "Nome do usuário é obrigatório").trim();
@@ -25,28 +29,54 @@ public class User {
         this.passwordHash = Objects.requireNonNull(passwordHash, "Hash da senha é obrigatório");
         this.role = Objects.requireNonNullElse(role, UserRole.CUSTOMER);
         this.active = active;
+        this.companyIds = companyIds != null ? new ArrayList<>(companyIds) : new ArrayList<>();
         this.createdAt = Objects.requireNonNullElseGet(createdAt, Instant::now);
         this.updatedAt = Objects.requireNonNullElseGet(updatedAt, Instant::now);
     }
 
-    public static User create(UUID tenantId, String name, String email, String passwordHash, UserRole role) {
-        Instant now = Instant.now();
-        return new User(UUID.randomUUID(), tenantId, name, email, passwordHash, role, true, now, now);
+    public User(UUID id, UUID tenantId, String name, String email, String passwordHash,
+                UserRole role, boolean active, Instant createdAt, Instant updatedAt) {
+        this(id, tenantId, name, email, passwordHash, role, active, Collections.emptyList(), createdAt, updatedAt);
     }
 
-    public void updateProfile(String name, String email) {
+    public static User create(UUID tenantId, String name, String email, String passwordHash, UserRole role) {
+        Instant now = Instant.now();
+        return new User(UUID.randomUUID(), tenantId, name, email, passwordHash, role, true, new ArrayList<>(), now, now);
+    }
+
+    public static User createWithCompanies(UUID tenantId, String name, String email, String passwordHash,
+                                          UserRole role, List<UUID> companyIds) {
+        Instant now = Instant.now();
+        return new User(UUID.randomUUID(), tenantId, name, email, passwordHash, role, true, companyIds, now, now);
+    }
+
+    public void updateProfile(String name, String email, UserRole role) {
         if (name != null && !name.isBlank()) {
             this.name = name.trim();
         }
         if (email != null && !email.isBlank()) {
             this.email = email.toLowerCase().trim();
         }
+        if (role != null) {
+            this.role = role;
+        }
         this.updatedAt = Instant.now();
+    }
+
+    public void updateProfile(String name, String email) {
+        updateProfile(name, email, null);
     }
 
     public void changePassword(String newPasswordHash) {
         this.passwordHash = Objects.requireNonNull(newPasswordHash, "Novo hash de senha é obrigatório");
         this.updatedAt = Instant.now();
+    }
+
+    public void assignCompanies(List<UUID> newCompanyIds) {
+        if (newCompanyIds != null) {
+            this.companyIds = new ArrayList<>(newCompanyIds);
+            this.updatedAt = Instant.now();
+        }
     }
 
     public void activate() {
@@ -87,6 +117,10 @@ public class User {
         return active;
     }
 
+    public List<UUID> getCompanyIds() {
+        return Collections.unmodifiableList(companyIds);
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
@@ -95,4 +129,3 @@ public class User {
         return updatedAt;
     }
 }
-

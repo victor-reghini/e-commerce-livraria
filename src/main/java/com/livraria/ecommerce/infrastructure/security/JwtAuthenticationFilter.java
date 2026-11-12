@@ -1,5 +1,6 @@
 package com.livraria.ecommerce.infrastructure.security;
 
+import com.livraria.ecommerce.domain.model.permission.RolePermissions;
 import com.livraria.ecommerce.domain.model.user.UserRole;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.tenancy.TenantContext;
 import jakarta.servlet.FilterChain;
@@ -15,6 +16,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
@@ -39,7 +43,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             UserRole role = tokenProvider.getRoleFromToken(jwt);
             String name = tokenProvider.getClaims(jwt).get("name", String.class);
 
-            UserPrincipal principal = new UserPrincipal(userId, tenantId, name, email, role);
+            List<String> tokenPermissions = tokenProvider.getPermissionsFromToken(jwt);
+            Set<String> permissions = new HashSet<>(tokenPermissions);
+            if (permissions.isEmpty()) {
+                permissions.addAll(RolePermissions.getPermissionsForRole(role));
+            }
+
+            UserPrincipal principal = new UserPrincipal(userId, tenantId, name, email, role, permissions);
 
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
@@ -64,4 +74,3 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return null;
     }
 }
-

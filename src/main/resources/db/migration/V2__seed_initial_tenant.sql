@@ -41,7 +41,7 @@ INSERT INTO tenant_domains (
     true
 ) ON CONFLICT (domain) DO NOTHING;
 
--- 3. Usuário Administrador Inicial do Tenant
+-- Usuário Administrador Inicial do Tenant
 -- Senha padrão para testes de desenvolvimento: Admin@123456
 -- Hash BCrypt gerado com custo 10
 INSERT INTO users (
@@ -57,8 +57,8 @@ INSERT INTO users (
     '00000000-0000-0000-0000-000000000001',
     'Administrador Matriz',
     'admin@livrariamatriz.com.br',
-    '$2a$10$7ZkE0B73h3u8d31a5K11bO8vJz67V8T6lGf0uO7yZz2A9D1C3e4Gy',
+    '$2a$10$HI3FI/C7nA2Rvsgisf.pSeCC8E/HMbtdxkmY.0RPYRkz6jvR.Wx6O',
     'TENANT_ADMIN',
     true
-) ON CONFLICT (tenant_id, email) DO NOTHING;
+) ON CONFLICT (tenant_id, email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 

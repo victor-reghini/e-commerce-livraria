@@ -41,7 +41,7 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Endpoints públicos (autenticação, health, métricas e documentação)
+                        // Endpoints públicos (autenticação, health, catálogo público, métricas e documentação)
                         .requestMatchers(
                                 "/api/v1/auth/**",
                                 "/api/v1/health/**",
@@ -49,8 +49,13 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**",
+                                "/docs/**",
+                                "/docs",
+                                "/documentation/**",
+                                "/documentation",
                                 "/error"
                         ).permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/products/**", "/api/v1/taxonomy/**").permitAll()
                         // Demais endpoints requerem autenticação
                         .anyRequest().authenticated()
                 )
