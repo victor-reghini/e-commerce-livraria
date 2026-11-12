@@ -38,6 +38,11 @@ public class TenantFilter extends OncePerRequestFilter {
     protected void doFilterInternal(@NonNull HttpServletRequest request,
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain) throws ServletException, IOException {
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         try {
             // 1. Tenta resolver via cabeçalho HTTP explícito (X-Tenant-ID)
             String tenantHeader = request.getHeader(TENANT_HEADER);

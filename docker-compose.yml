@@ -137,6 +137,74 @@ services:
     networks:
       - app-network
 
+  # ============================================================================
+  # 6. Observabilidade & Métricas: Prometheus
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: ecommerce-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - app-network
+
+  # ============================================================================
+  # 7. Monitoramento de Logs: Grafana Loki & Promtail
+  # ============================================================================
+  loki:
+    image: grafana/loki:3.2.0
+    container_name: ecommerce-loki
+    restart: unless-stopped
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./docker/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - app-network
+
+  promtail:
+    image: grafana/promtail:3.2.0
+    container_name: ecommerce-promtail
+    restart: unless-stopped
+    volumes:
+      - ./docker/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - app-network
+
+  # ============================================================================
+  # 8. Painel Visual & Dashboards: Grafana
+  # ============================================================================
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: ecommerce-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin_secret_password}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/livraria-overview.json
+    ports:
+      - "${GRAFANA_PORT:-3030}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
@@ -145,4 +213,7 @@ volumes:
   postgres_data:
   redis_data:
   rabbitmq_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:
 

@@ -83,9 +83,11 @@ public class SecurityConfig {
                 .filter(s -> !s.isBlank())
                 .toList();
         configuration.setAllowedOrigins(origins);
+        configuration.addAllowedOriginPattern("http://localhost:*");
+        configuration.addAllowedOriginPattern("http://127.0.0.1:*");
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Tenant-ID", "X-Correlation-ID"));
-        configuration.setExposedHeaders(List.of("X-Correlation-ID", "X-Tenant-ID"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(List.of("X-Correlation-ID", "X-Tenant-ID", "Authorization"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

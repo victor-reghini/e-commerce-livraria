@@ -4,7 +4,7 @@
 [![Java 21 LTS](https://img.shields.io/badge/Java-21%20LTS-orange.svg)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot 3.3](https://img.shields.io/badge/Spring%20Boot-3.3.5-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![Docker Compose](https://img.shields.io/badge/Docker%20Compose-v2-blue.svg)](https://docs.docker.com/compose/)
-[![Tests Passing](https://img.shields.io/badge/Tests-209%20passed-success.svg)](#7-executando-os-testes)
+[![Tests Passing](https://img.shields.io/badge/Tests-209%20passed-success.svg)](#8-executando-os-testes)
 [![Architecture](https://img.shields.io/badge/Architecture-Clean%20%2F%20Hexagonal-purple.svg)](ARCHITECTURE.md)
 
 Repositório central de **Backend e Infraestrutura Portátil** da nova plataforma de e-commerce, frente de caixa (PDV) e gestão para livrarias e varejo em geral, desenvolvida sob os princípios da **Clean Architecture (Hexagonal)** com **Java 21 LTS**, **Virtual Threads (Project Loom)** e isolamento de dados estrito por **PostgreSQL Row-Level Security (RLS)**.
@@ -97,7 +97,10 @@ A plataforma foi projetada para unificar as operações digitais e presenciais d
 | **Redis 7** | `localhost:6379` | Cache de alta velocidade, blacklist de tokens e sessões |
 | **MinIO Console** | `http://localhost:9001` | Armazenamento de objetos S3 local (capas e e-books) |
 | **RabbitMQ Management** | `http://localhost:15672` | Painel de controle de filas e mensageria assíncrona |
-| **Métricas Prometheus** | `http://localhost:8080/actuator/prometheus` | Métricas de sistema, JVM e negócio |
+| **Grafana Dashboards** | `http://localhost:3030` | Interface visual de monitoramento de logs e métricas |
+| **Prometheus Server** | `http://localhost:9090` | Coleta e consulta de métricas de performance e negócio |
+| **Grafana Loki** | `http://localhost:3100` | Ingestão e agregação de logs estruturados em JSON |
+| **Métricas Prometheus (Raw)** | `http://localhost:8080/actuator/prometheus` | Exportação de métricas da JVM e Spring Boot |
 
 ---
 
@@ -118,7 +121,12 @@ A plataforma foi projetada para unificar as operações digitais e presenciais d
     }'
   ```
 
-### Painéis de Administração dos Serviços
+### Painéis de Administração & Monitoramento
+- **Grafana (`http://localhost:3030`)**:
+  - Usuário: `admin`
+  - Senha: `admin_secret_password`
+  - *Datasources pré-configurados:* Loki (Logs) e Prometheus (Métricas)
+  - *Dashboard automático:* `Livraria Multi-Tenant - Visão Geral & Logs`
 - **MinIO Console (`http://localhost:9001`)**:
   - Usuário: `minio_admin_user`
   - Senha: `minio_admin_secret_password`
@@ -128,7 +136,32 @@ A plataforma foi projetada para unificar as operações digitais e presenciais d
 
 ---
 
-## 7. Executando os Testes
+## 7. Monitoramento e Análise de Logs (Grafana + Loki)
+
+A plataforma utiliza **Logstash Logback Encoder** para produzir logs estruturados em JSON enriquecidos com contexto distribuído via MDC (`tenant_id`, `correlation_id`, `user_id`, `environment`). O agente **Promtail** coleta esses logs em tempo real e os envia ao **Grafana Loki**.
+
+Acesse o **Grafana** (`http://localhost:3030`), navegue até **Explore** e selecione o datasource **Loki**:
+
+- **Filtrar todos os logs de um Tenant específico:**
+  ```logql
+  {container="ecommerce-backend"} | json | tenant_id="00000000-0000-0000-0000-000000000001"
+  ```
+- **Rastrear uma requisição ponta a ponta pelo Correlation ID:**
+  ```logql
+  {container="ecommerce-backend"} | json | correlation_id="550e8400-e29b-41d4-a716-446655440000"
+  ```
+- **Filtrar apenas erros e exceções:**
+  ```logql
+  {container="ecommerce-backend"} | json | level="ERROR"
+  ```
+- **Filtrar logs operacionais do PDV e Vendas:**
+  ```logql
+  {container="ecommerce-backend"} |= "pos" or "checkout"
+  ```
+
+---
+
+## 8. Executando os Testes
 
 O projeto conta com uma suíte abrangente de testes unitários e de integração cobrindo todas as regras de domínio, validações fiscais e cenários de persistência:
 
@@ -145,7 +178,7 @@ mvn test
 
 ---
 
-## 8. Documentação Técnica & Links Úteis
+## 9. Documentação Técnica & Links Úteis
 
 Para consultar especificações técnicas detalhadas, diagramas, endpoints e histórico de desenvolvimento:
 

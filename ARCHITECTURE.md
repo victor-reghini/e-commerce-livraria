@@ -1165,7 +1165,45 @@ Projetado sob o princípio do **Twelve-Factor App** e **Zero Cloud-Lock-In**, pe
 | **Armazenamento S3** | MinIO Server | S3-compatible local com buckets pré-configurados (`ecommerce-media`, `ecommerce-ebooks`) |
 | **Mensageria** | RabbitMQ 3.13 Management | Processamento assíncrono de NF-e, webhooks e notificações |
 | **Métricas** | Prometheus + Micrometer | Coleta de métricas da JVM, Virtual Threads e latências de checkout |
-| **Logs Estruturados** | Grafana Loki + Promtail | Centralização de logs estruturados em JSON com campos de MDC |
+| **Logs Estruturados** | Grafana Loki + Promtail | Ingestão e agregação de logs JSON em streaming com labels de MDC |
+| **Visualização & Alertas** | Grafana 11.2 | Dashboards visuais em tempo real, painel de logs e consulta LogQL |
+
+### 2.1. Arquitetura de Monitoramento de Logs & Métricas
+
+```
+┌────────────────────────────────────────────────────────┐
+│             Backend Spring Boot 3.3.5                  │
+│                                                        │
+│  MdcLoggingFilter (tenant_id, correlation_id, user_id) │
+│                          │                             │
+│                          ▼                             │
+│       LogstashEncoder (Logback Console JSON)           │
+└──────────────────────────┬─────────────────────────────┘
+                           │ stdout (Docker logging driver)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│            Promtail Container (Daemon Log Collector)   │
+│   Lê /var/run/docker.sock e anota metadados de tags    │
+└──────────────────────────┬─────────────────────────────┘
+                           │ HTTP POST /loki/api/v1/push
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│                   Grafana Loki                         │
+│       Indexação de streams por labels e chunks TSDB    │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│                 Grafana Dashboard (Port 3000)          │
+│   Dashboards pré-provisionados com LogQL e Prometheus  │
+└────────────────────────────────────────────────────────┘
+```
+
+#### Consultas LogQL de Referência (Loki)
+- **Logs por Tenant isolado:** `{container="ecommerce-backend"} | json | tenant_id="00000000-0000-0000-0000-000000000001"`
+- **Rastreabilidade por Correlation ID:** `{container="ecommerce-backend"} | json | correlation_id="<uuid>"`
+- **Filtro de Exceções:** `{container="ecommerce-backend"} | json | level="ERROR"`
+- **Erros de Transmissão SEFAZ:** `{container="ecommerce-backend"} |= "SEFAZ" |= "ERROR"`
 
 ---
 

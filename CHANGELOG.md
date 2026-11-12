@@ -132,6 +132,11 @@ Entrega completa do núcleo de backend, infraestrutura portátil em Docker Compo
   - Logging estruturado em JSON para produção (compatível com Grafana Loki, Promtail, AWS CloudWatch e ELK).
   - Exportação de métricas customizadas de negócio via Micrometer e Prometheus (`/actuator/prometheus` e `/api/v1/observability/summary`):
     - `ecommerce.orders.created`, `ecommerce.orders.paid`, `pos.sales.completed`, `fiscal.invoices.emitted`, `fiscal.invoices.canceled`, `sefaz.transmission.time`.
+- [x] **Stack de Monitoramento de Logs & Dashboards (Grafana + Loki + Promtail)**:
+  - Centralização de logs estruturados em JSON via `Promtail` conectado a `/var/run/docker.sock`.
+  - Agregação e indexação em tempo real via `Grafana Loki` com rotulagem automática de containers e streams.
+  - Provisionamento automático de datasources no `Grafana 11.2` (`docker/grafana/provisioning/datasources/datasources.yml`) conectando Prometheus e Loki.
+  - Dashboard nativo provisionado (`Livraria Multi-Tenant - Visão Geral & Logs`) com visualização de logs filtráveis por `tenant_id` e métricas de Virtual Threads / Heap da JVM.
 - [x] **Roteiro e Templates de Migração VPS → AWS (Zero Cloud-Lock-In)**:
   - Documentação completa de migração sem downtime em `deploy/aws-migration/vps-to-aws-migration.md`.
   - Template de task definition para deploy serverless no AWS ECS Fargate em `deploy/aws-migration/ecs-task-definition.json`.

@@ -12,6 +12,20 @@
         mermaid.initialize({
             startOnLoad: false,
             theme: 'dark',
+            themeCSS: `
+                .er.entityBox, rect.er.entityBox, [class*="entityBox"] { fill: #27272b !important; stroke: #52525b !important; }
+                .er.attributeBoxOdd, rect.er.attributeBoxOdd, [class*="attributeBoxOdd"] { fill: #1c1c20 !important; stroke: #38383e !important; }
+                .er.attributeBoxEven, rect.er.attributeBoxEven, [class*="attributeBoxEven"] { fill: #222226 !important; stroke: #38383e !important; }
+                .er.entityLabel, [class*="entityLabel"] { fill: #f4f4f6 !important; font-weight: 700 !important; }
+                .er.attributeLabelOdd, .er.attributeLabelEven, [class*="attributeLabel"] { fill: #f4f4f6 !important; }
+                .er.relationshipLine, [class*="relationshipLine"] { stroke: #8e8e93 !important; }
+                .er.relationshipLabel, [class*="relationshipLabel"] { fill: #d4d4d8 !important; }
+                [id*="entity"] rect, g[id*="entity"] rect { fill: #222226 !important; stroke: #38383e !important; }
+                [id*="entity"] rect:first-of-type, g[id*="entity"] rect:first-of-type { fill: #27272b !important; stroke: #52525b !important; }
+                [id*="entity"] rect:nth-of-type(odd), g[id*="entity"] rect:nth-of-type(odd) { fill: #1c1c20 !important; }
+                [id*="entity"] rect:nth-of-type(even), g[id*="entity"] rect:nth-of-type(even) { fill: #222226 !important; }
+                [id*="entity"] text, g[id*="entity"] text { fill: #f4f4f6 !important; }
+            `,
             themeVariables: {
                 darkMode: true,
                 background: '#141416',
@@ -753,24 +767,59 @@
             font-family: 'Inter', sans-serif !important;
         }
 
-        /* ER Diagram Overrides - Fix White Boxes */
+        /* ER Diagram Overrides - Comprehensive Fix for Entity & Attribute Boxes */
         .mermaid .er.entityBox,
         .mermaid rect.er.entityBox,
-        .mermaid [class*="entityBox"] {
+        .mermaid [class*="entityBox"],
+        .diagram-container svg [class*="entityBox"],
+        svg [class*="entityBox"] {
             fill: #27272b !important;
             stroke: #52525b !important;
         }
         .mermaid .er.attributeBoxOdd,
         .mermaid rect.er.attributeBoxOdd,
-        .mermaid [class*="attributeBoxOdd"] {
+        .mermaid [class*="attributeBoxOdd"],
+        .diagram-container svg [class*="attributeBoxOdd"],
+        svg [class*="attributeBoxOdd"] {
             fill: #1c1c20 !important;
             stroke: #38383e !important;
         }
         .mermaid .er.attributeBoxEven,
         .mermaid rect.er.attributeBoxEven,
-        .mermaid [class*="attributeBoxEven"] {
+        .mermaid [class*="attributeBoxEven"],
+        .diagram-container svg [class*="attributeBoxEven"],
+        svg [class*="attributeBoxEven"] {
             fill: #222226 !important;
             stroke: #38383e !important;
+        }
+        .mermaid [id*="entity"] rect,
+        .diagram-container svg [id*="entity"] rect,
+        svg [id*="entity"] rect,
+        svg g.er rect,
+        .diagram-container svg g.er rect {
+            fill: #222226 !important;
+            stroke: #38383e !important;
+        }
+        .mermaid [id*="entity"] rect:first-of-type,
+        .diagram-container svg [id*="entity"] rect:first-of-type,
+        svg [id*="entity"] rect:first-of-type {
+            fill: #27272b !important;
+            stroke: #52525b !important;
+        }
+        .mermaid [id*="entity"] rect:nth-of-type(odd),
+        .diagram-container svg [id*="entity"] rect:nth-of-type(odd),
+        svg [id*="entity"] rect:nth-of-type(odd) {
+            fill: #1c1c20 !important;
+        }
+        .mermaid [id*="entity"] rect:nth-of-type(even),
+        .diagram-container svg [id*="entity"] rect:nth-of-type(even),
+        svg [id*="entity"] rect:nth-of-type(even) {
+            fill: #222226 !important;
+        }
+        .mermaid [id*="entity"] text,
+        .diagram-container svg [id*="entity"] text,
+        svg [id*="entity"] text {
+            fill: #f4f4f6 !important;
         }
         .mermaid .er.entityLabel,
         .mermaid [class*="entityLabel"] {
@@ -1330,6 +1379,20 @@ classDiagram
 
             <div class="diagram-container">
                 <div class="mermaid">
+%%{init: {
+  "theme": "dark",
+  "themeCSS": "
+    g[id*='entity'] rect { fill: #222226 !important; stroke: #38383e !important; }
+    g[id*='entity'] rect:first-of-type { fill: #27272b !important; stroke: #52525b !important; }
+    g[id*='entity'] rect:nth-of-type(odd) { fill: #1c1c20 !important; }
+    g[id*='entity'] rect:nth-of-type(even) { fill: #222226 !important; }
+    .er.entityBox { fill: #27272b !important; stroke: #52525b !important; }
+    .er.attributeBoxOdd { fill: #1c1c20 !important; stroke: #38383e !important; }
+    .er.attributeBoxEven { fill: #222226 !important; stroke: #38383e !important; }
+    .er.entityLabel { fill: #f4f4f6 !important; font-weight: bold !important; }
+    .er.attributeLabelOdd, .er.attributeLabelEven { fill: #f4f4f6 !important; }
+  "
+}}%%
 erDiagram
     tenants ||--o{ tenant_domains : "possui dominios"
     tenants ||--o{ companies : "possui filiais"
@@ -1849,16 +1912,16 @@ sequenceDiagram
     Batch->>Parser: Inicia leitura em streaming linha a linha
     Parser-->>Batch: Agrupa em chunks de 500 registros
     loop Para cada linha do chunk
-        Batch->>Tx: execute(status => importaRegistro)
+        Batch->>Tx: execute(callback de importação)
         alt Linha Válida
             Tx->>DB: Salva Categoria, Autor, Editora, Produto, SKU e Saldo
             Tx-->>Batch: Sucesso (successCount++)
         else Linha com Erro (ex: ISBN Inválido)
             Tx->>DB: Executa Rollback apenas desta linha
-            Tx-->>Batch: Registra erro em List~BatchImportRowError~ (failureCount++)
+            Tx-->>Batch: Registra erro em lista de falhas (failureCount++)
         end
     end
-    Batch-->>Ctrl: BatchImportResult {total: 1000, sucesso: 998, falhas: 2, errors: [...]}
+    Batch-->>Ctrl: BatchImportResult (total: 1000, sucesso: 998, falhas: 2, erros)
     Ctrl-->>Admin: 200 OK + Relatório de Auditoria
                     </div>
                 </div>
@@ -3294,6 +3357,62 @@ sequenceDiagram
         }
 
         // Sequence flow switcher
+        function sanitizeMermaidColors() {
+            function isLight(str) {
+                if (!str) return false;
+                const s = str.trim().toLowerCase();
+                if (s === '#fff' || s === '#ffffff' || s === 'white' || s === '#f2f2f2' || s === '#ececff' || s === '#f4f4f4' || s === '#f9f9f9') return true;
+                const match = s.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+                if (match) {
+                    const r = parseInt(match[1], 10);
+                    const g = parseInt(match[2], 10);
+                    const b = parseInt(match[3], 10);
+                    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                    return brightness > 180;
+                }
+                return false;
+            }
+
+            document.querySelectorAll('svg').forEach(svg => {
+                // 1. Force dark styling on all ER entity boxes and table compartments
+                svg.querySelectorAll('[id*="entity"], g.er, .er').forEach(group => {
+                    const rects = group.querySelectorAll('rect');
+                    rects.forEach((rect, idx) => {
+                        rect.style.setProperty('stroke', '#38383e', 'important');
+                        if (idx === 0) {
+                            rect.style.setProperty('fill', '#27272b', 'important');
+                            rect.style.setProperty('stroke', '#52525b', 'important');
+                        } else if (idx % 2 === 1) {
+                            rect.style.setProperty('fill', '#1c1c20', 'important');
+                        } else {
+                            rect.style.setProperty('fill', '#222226', 'important');
+                        }
+                    });
+                });
+
+                // 2. Ensure all text inside entities is light/readable
+                svg.querySelectorAll('[id*="entity"] text, g.er text, .er text').forEach(t => {
+                    t.style.setProperty('fill', '#f4f4f6', 'important');
+                });
+
+                // 3. Universal fallback sanitizer for any light backgrounds across all diagrams
+                svg.querySelectorAll('rect, polygon, circle').forEach(el => {
+                    const attrFill = el.getAttribute('fill');
+                    const compFill = window.getComputedStyle(el).fill;
+                    if (isLight(attrFill) || isLight(compFill)) {
+                        if (el.classList.contains('attributeBoxOdd')) {
+                            el.style.setProperty('fill', '#1c1c20', 'important');
+                        } else if (el.classList.contains('entityBox')) {
+                            el.style.setProperty('fill', '#27272b', 'important');
+                        } else {
+                            el.style.setProperty('fill', '#222226', 'important');
+                        }
+                        el.style.setProperty('stroke', '#38383e', 'important');
+                    }
+                });
+            });
+        }
+
         function switchSeqFlow(tabId, element) {
             document.querySelectorAll('.seq-menu-btn').forEach(btn => btn.classList.remove('active'));
             if (element) element.classList.add('active');
@@ -3306,6 +3425,7 @@ sequenceDiagram
                 if (container && diagramViewers.has(container.id)) {
                     requestAnimationFrame(() => {
                         diagramViewers.get(container.id).fitToWidth(false);
+                        sanitizeMermaidColors();
                     });
                 }
             }
@@ -3426,20 +3546,7 @@ sequenceDiagram
             }
 
             // Post-render color sanitizer to guarantee zero white boxes
-            document.querySelectorAll('.mermaid svg').forEach(svg => {
-                svg.querySelectorAll('rect, polygon, circle').forEach(el => {
-                    const fill = (el.getAttribute('fill') || '').toLowerCase();
-                    if (fill === '#ffffff' || fill === '#fff' || fill === 'white' || fill === 'rgb(255, 255, 255)' || fill === '#f2f2f2' || fill === '#ececff') {
-                        if (el.classList.contains('attributeBoxOdd')) {
-                            el.style.setProperty('fill', '#1c1c20', 'important');
-                        } else if (el.classList.contains('entityBox')) {
-                            el.style.setProperty('fill', '#27272b', 'important');
-                        } else {
-                            el.style.setProperty('fill', '#222226', 'important');
-                        }
-                    }
-                });
-            });
+            sanitizeMermaidColors();
 
             // 4. Restore inactive sequence tabs to display: none
             inactiveTabs.forEach(tab => {

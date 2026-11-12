@@ -144,14 +144,30 @@ public class AuthService implements AuthUseCase {
             throw new TenantNotFoundException("Identificador de loja não informado");
         }
 
-        String cleaned = domainOrSlug.trim().toLowerCase();
+        String cleaned = domainOrSlug.trim();
+        Optional<Tenant> tenantOpt = Optional.empty();
 
-        // Tenta buscar por slug primeiro
-        Optional<Tenant> tenantOpt = tenantRepository.findBySlug(cleaned);
+        // 1. Tenta buscar diretamente por ID caso o identificador seja um UUID válido
+        try {
+            UUID tenantId = UUID.fromString(cleaned);
+            tenantOpt = tenantRepository.findById(tenantId);
+        } catch (IllegalArgumentException ignored) {
+            // Não é UUID, prossegue com busca por slug ou domínio
+        }
 
-        // Se não encontrar, tenta por domínio
+        // 2. Tenta buscar por slug
         if (tenantOpt.isEmpty()) {
-            tenantOpt = tenantRepository.findByDomain(cleaned);
+            tenantOpt = tenantRepository.findBySlug(cleaned.toLowerCase());
+        }
+
+        // 3. Tenta buscar por domínio
+        if (tenantOpt.isEmpty()) {
+            tenantOpt = tenantRepository.findByDomain(cleaned.toLowerCase());
+        }
+
+        // 4. Fallback para localhost em ambiente de desenvolvimento local quando acessado via IP
+        if (tenantOpt.isEmpty() && ("127.0.0.1".equals(cleaned) || "localhost".equalsIgnoreCase(cleaned))) {
+            tenantOpt = tenantRepository.findByDomain("localhost");
         }
 
         Tenant tenant = tenantOpt.orElseThrow(() ->

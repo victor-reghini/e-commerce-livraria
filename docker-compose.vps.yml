@@ -212,6 +212,36 @@ services:
     networks:
       - app-network
 
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: ecommerce-grafana
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin_secret_password}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: "https://${GRAFANA_SUBDOMAIN:-grafana.seudominio.com.br}"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/livraria-overview.json
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`${GRAFANA_SUBDOMAIN:-grafana.seudominio.com.br}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - app-network
+
   # ============================================================================
   # 7. Backend Java 21 Spring Boot (Loom / Virtual Threads)
   # ============================================================================
@@ -277,4 +307,5 @@ volumes:
   traefik_acme:
   prometheus_data:
   loki_data:
+  grafana_data:
 
