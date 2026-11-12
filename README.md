@@ -243,6 +243,64 @@ classDiagram
         +incrementScanned(int count)
     }
 
+    class CashShift {
+        +UUID id
+        +UUID tenantId
+        +UUID companyId
+        +UUID cashierId
+        +String shiftNumber
+        +ShiftStatus status
+        +BigDecimal openingBalance
+        +BigDecimal expectedBalance
+        +BigDecimal actualBalance
+        +BigDecimal divergence
+        +addSupply(BigDecimal amount, String reason)
+        +addBleed(BigDecimal amount, String reason)
+        +recordSalePayment(BigDecimal amount, PaymentMethod method)
+        +closeBlind(BigDecimal countedCash, String notes)
+    }
+
+    class CashMovement {
+        +UUID id
+        +UUID shiftId
+        +CashMovementType movementType
+        +BigDecimal amount
+        +PaymentMethod paymentMethod
+        +String reason
+    }
+
+    class PosSale {
+        +UUID id
+        +UUID companyId
+        +UUID shiftId
+        +String saleNumber
+        +UUID clientUuid
+        +BigDecimal subtotal
+        +BigDecimal discount
+        +BigDecimal total
+        +BigDecimal totalPaid
+        +BigDecimal changeAmount
+        +SaleStatus status
+        +String nfceKey
+        +NfceStatus nfceStatus
+        +cancel()
+    }
+
+    class PosSaleItem {
+        +UUID id
+        +UUID skuId
+        +int quantity
+        +BigDecimal unitPrice
+        +BigDecimal discount
+        +BigDecimal subtotal
+    }
+
+    class PosSalePayment {
+        +UUID id
+        +PaymentMethod paymentMethod
+        +BigDecimal amount
+    }
+
     Tenant "1" --> "*" Company : possui filiais
     Tenant "1" --> "*" User : possui colaboradores
     Tenant "1" --> "*" Product : cataloga
@@ -256,6 +314,11 @@ classDiagram
     Company "1" --> "*" StockMovement : ledger
     Company "1" --> "*" BlindAudit : auditorias de retorno
     BlindAudit "1" --> "*" BlindAuditItem : contagens bipadas
+    Company "1" --> "*" CashShift : turnos de caixa
+    CashShift "1" --> "*" CashMovement : suprimentos / sangrias
+    CashShift "1" --> "*" PosSale : vendas vinculadas
+    PosSale "1" --> "*" PosSaleItem : itens vendidos
+    PosSale "1" --> "*" PosSalePayment : múltiplos pagamentos
 ```
 
 ### 1.3. Diagrama Entidade-Relacionamento (ER) com Row-Level Security
@@ -404,6 +467,69 @@ erDiagram
         int quantity_scanned
         int quantity_expected
         int divergence
+    }
+
+    cash_shifts {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid cashier_id FK
+        varchar shift_number UK
+        varchar status
+        numeric opening_balance
+        numeric expected_balance
+        numeric actual_balance
+        numeric divergence
+        timestamp opened_at
+        timestamp closed_at
+    }
+
+    cash_movements {
+        uuid id PK
+        uuid tenant_id FK
+        uuid shift_id FK
+        varchar movement_type
+        numeric amount
+        varchar payment_method
+        varchar reason
+        timestamp created_at
+    }
+
+    pos_sales {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid shift_id FK
+        varchar sale_number UK
+        uuid client_uuid UK
+        numeric subtotal
+        numeric discount
+        numeric total
+        numeric total_paid
+        numeric change_amount
+        varchar status
+        varchar nfce_key
+        varchar nfce_status
+        timestamp created_at
+    }
+
+    pos_sale_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid sale_id FK
+        uuid sku_id FK
+        int quantity
+        numeric unit_price
+        numeric discount
+        numeric subtotal
+    }
+
+    pos_sale_payments {
+        uuid id PK
+        uuid tenant_id FK
+        uuid sale_id FK
+        varchar payment_method
+        numeric amount
     }
 ```
 
@@ -571,6 +697,100 @@ sequenceDiagram
     Service->>MoveRepo: save(StockMovement: AJUSTE_AUDITORIA com divergência e saldo após)
     Service->>AuditRepo: save(BlindAudit: CONCILIADA)
     AuditRepo-->>Ctrl: 200 OK (Auditoria concluída com divergências conciliadas)
+```
+
+#### G. Turno de Caixa, Suprimento, Sangria e Fechamento Cego
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Caixa as Operador de Caixa / Balcão
+    participant Ctrl as PosController
+    participant Service as PosService
+    participant ShiftRepo as CashShiftRepositoryPort
+
+    Note over Caixa,ShiftRepo: 1. Abertura do Turno com Fundo de Troco
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/open (openingBalance: R$ 100,00)
+    Ctrl->>Service: openShift(companyId, 100.00, cashierId)
+    Service->>ShiftRepo: save(CashShift: ABERTO, Suprimento Inicial: R$ 100,00)
+    ShiftRepo-->>Ctrl: 201 Created (CX-2026-001)
+
+    Note over Caixa,ShiftRepo: 2. Suprimento e Sangria com Trava de Saldo em Gaveta
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/{id}/supply (amount: R$ 50,00)
+    Ctrl->>Service: supplyCash(shiftId, 50.00, "Reforço troco")
+    Service->>ShiftRepo: Registra movimento SUPRIMENTO (Saldo gaveta = R$ 150,00)
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/{id}/bleed (amount: R$ 100,00)
+    Ctrl->>Service: bleedCash(shiftId, 100.00, "Retirada cofre")
+    Service->>ShiftRepo: Valida saldo >= 100 e registra SANGRIA (Saldo gaveta = R$ 50,00)
+
+    Note over Caixa,ShiftRepo: 3. Fechamento Cego com Apuração de Quebra de Caixa
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/{id}/close (countedCash: R$ 48,00)
+    Ctrl->>Service: closeShift(shiftId, 48.00)
+    Note over Service: Esperado = R$ 50,00 | Contado = R$ 48,00 | Divergência = R$ -2,00
+    Service->>ShiftRepo: save(CashShift: FECHADO, divergence: -2.00)
+    ShiftRepo-->>Ctrl: 200 OK (Turno fechado com auditoria)
+```
+
+#### H. Venda Balcão / Feira, Múltiplos Pagamentos, Baixa de Estoque e NFC-e
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Cliente as Consumidor Presencial
+    actor Caixa as Operador PDV
+    participant Ctrl as PosController
+    participant Service as PosService
+    participant StockRepo as StockRepositoryPort
+    participant MoveRepo as StockMovementRepositoryPort
+    participant SaleRepo as PosSaleRepositoryPort
+    participant ShiftRepo as CashShiftRepositoryPort
+
+    Cliente->>Caixa: Apresenta 2 Livros (EAN-13: 9788576082675, R$ 50,00 cada)
+    Caixa->>Ctrl: POST /api/v1/pos/sales (Itens: [SKU-1: 2 un], Pagamentos: [PIX: R$ 60,00, Dinheiro: R$ 50,00])
+    Ctrl->>Service: createSale(request, cashierId)
+    Service->>StockRepo: getAvailableStock(Filial, SKU-1)
+    StockRepo-->>Service: Saldo disponível = 15 un (OK >= 2)
+    Note over Service: Total: R$ 100,00 | Pago: R$ 110,00 | Troco: R$ 10,00
+    Service->>StockRepo: setStockQuantity (Baixa física de 2 un na filial)
+    Service->>MoveRepo: save(StockMovement: VENDA_PDV, -2 un, ref: saleId)
+    Service->>ShiftRepo: Registra recebimentos no turno do caixa
+    Note over Service: Gera Chave de 44 dígitos (Modelo 65), XML e QR Code SEFAZ
+    Service->>SaleRepo: save(PosSale: CONCLUIDA, nfceStatus: EMITIDA)
+    SaleRepo-->>Ctrl: 201 Created (VD-500)
+    Ctrl-->>Caixa: 201 Created (Retorna dados da venda e troco de R$ 10,00)
+    Caixa->>Ctrl: GET /api/v1/pos/sales/{id}/receipt
+    Ctrl-->>Caixa: Retorna cupom térmico ESC/POS
+```
+
+#### I. PDV Offline & Ingestão Resiliente com Chave de Idempotência
+```mermaid
+sequenceDiagram
+    autonumber
+    actor PDV as PWA PDV Mobile (Offline-First)
+    participant Ctrl as PosController
+    participant Service as PosService
+    participant SaleRepo as PosSaleRepositoryPort
+    participant StockRepo as StockRepositoryPort
+
+    Note over PDV,StockRepo: 1. Sincronização Delta de Catálogo
+    PDV->>Ctrl: GET /api/v1/pos/sync/catalog?companyId={standId}&updatedSince={timestamp}
+    Ctrl->>Service: syncCatalog(standId, timestamp)
+    Service-->>Ctrl: OfflineCatalogSyncResponse (Itens compactos com código, barcode, preço e estoque)
+    Ctrl-->>PDV: 200 OK (Cache local no IndexedDB)
+
+    Note over PDV,StockRepo: 2. Vendas Offline e Ingestão com Idempotência
+    PDV->>PDV: Realiza vendas offline gerando UUID v4 único (client_uuid) por venda
+    PDV->>Ctrl: POST /api/v1/pos/sync/offline-sales (Lote de vendas)
+    Ctrl->>Service: syncOfflineSales(salesList)
+    loop Para cada venda recebida
+        Service->>SaleRepo: findByClientUuid(tenantId, clientUuid)
+        alt Já Processada (Retransmissão de Rede)
+            SaleRepo-->>Service: Venda já existente (Ignora sem duplicar estoque nem faturamento)
+        else Nova Venda
+            Service->>StockRepo: Baixa estoque físico
+            Service->>SaleRepo: Salva venda e gera NFC-e em contingência offline
+        end
+    end
+    Service-->>Ctrl: OfflineBatchSyncResult (Sucesso com contagem de deduplicações)
+    Ctrl-->>PDV: 200 OK
 ```
 
 ---
@@ -876,21 +1096,21 @@ Plano de ação e cronograma faseado de atividades para o desenvolvimento comple
 
 ---
 
-### Sprint 4: PDV Mobile e Venda Balcão / Feira `[PRÓXIMA ETAPA]`
-- [ ] **Backend para Suporte a PDV Desacoplado & Modo Offline**:
-  - Endpoints ultra-rápidos e leves para sincronização de catálogo, clientes e fila de vendas offline com resolução de conflitos.
-- [ ] **Integração com Leitura Óptica de Código de Barras (Câmera & USB)**:
-  - Suporte à leitura de EAN-13 e ISBN via BarcodeDetector API / ZXing no PDV mobile e leitores laser USB tradicionais.
-- [ ] **Fluxo de Venda Balcão / Evento (Strategy Pattern)**:
-  - Bipagem dos itens → aplicação de desconto rápido → pagamento presencial (PIX Dinâmico, Cartão maquininha TEF/POS ou Dinheiro) → baixa imediata e exclusiva no estoque da unidade/feira ativa → conclusão sem frete.
-- [ ] **Emissão Instantânea de NFC-e (Modelo 65)**:
-  - Emissão síncrona/assíncrona de cupom fiscal eletrônico com impressão térmica (ESC/POS) ou envio digital via WhatsApp/E-mail.
-- [ ] **Controle Financeiro de Caixa**:
-  - Controle de abertura de caixa, suprimento, sangria (retirada) e fechamento cego de turno com conferência e relatório de quebra de caixa.
+### Sprint 4: PDV Mobile e Venda Balcão / Feira `[CONCLUÍDO]`
+- [x] **Backend para Suporte a PDV Desacoplado & Modo Offline**:
+  - Endpoints ultra-rápidos e leves para sincronização de catálogo (`/api/v1/pos/catalog/sync`), clientes e fila de vendas offline (`/api/v1/pos/sales/offline-sync`) com resolução de conflitos e garantia de idempotência por `client_uuid`.
+- [x] **Integração com Leitura Óptica de Código de Barras (Câmera & USB)**:
+  - Suporte à leitura de EAN-13 e ISBN no PDV mobile e leitores laser USB tradicionais com busca instantânea de SKU por código de barras.
+- [x] **Fluxo de Venda Balcão / Evento (Strategy Pattern)**:
+  - Bipagem dos itens → aplicação de desconto rápido → pagamento presencial (PIX Dinâmico, Cartão maquininha TEF/POS com split múltiplo ou Dinheiro com cálculo de troco) → baixa imediata e exclusiva no estoque da unidade/feira ativa (`VENDA_PDV`) → conclusão sem frete.
+- [x] **Emissão Instantânea de NFC-e (Modelo 65)**:
+  - Geração de chave de acesso canônica de 44 dígitos com dígito verificador módulo 11 (`NfceGenerator`), XML estruturado e impressão de cupom térmico ESC/POS padronizado (`/api/v1/pos/sales/{id}/receipt`).
+- [x] **Controle Financeiro de Caixa**:
+  - Controle de abertura de caixa, suprimento, sangria (com validação estrita de saldo em gaveta) e fechamento cego de turno com conferência e relatório de quebra/sobra de caixa (`/api/v1/pos/shifts`).
 
 ---
 
-### Sprint 5: E-Commerce Público, Pagar.me e Vendas a Prazo
+### Sprint 5: E-Commerce Público, Pagar.me e Vendas a Prazo `[EM ANDAMENTO]`
 - [ ] **Backend para Loja Pública Mobile-First**:
   - Endpoints otimizados para catalogação rápida, busca textual com autocomplete, Drawer de filtros facetados (preço, categoria, autor, editora) e paginação leve.
 - [ ] **Carrinho & Checkout Otimizado para 1-Clique**:

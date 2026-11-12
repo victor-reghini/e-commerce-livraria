@@ -639,6 +639,64 @@ classDiagram
         +incrementScanned(int count)
     }
 
+    class CashShift {
+        +UUID id
+        +UUID tenantId
+        +UUID companyId
+        +UUID cashierId
+        +String shiftNumber
+        +ShiftStatus status
+        +BigDecimal openingBalance
+        +BigDecimal expectedBalance
+        +BigDecimal actualBalance
+        +BigDecimal divergence
+        +addSupply(BigDecimal amount, String reason)
+        +addBleed(BigDecimal amount, String reason)
+        +recordSalePayment(BigDecimal amount, PaymentMethod method)
+        +closeBlind(BigDecimal countedCash, String notes)
+    }
+
+    class CashMovement {
+        +UUID id
+        +UUID shiftId
+        +CashMovementType movementType
+        +BigDecimal amount
+        +PaymentMethod paymentMethod
+        +String reason
+    }
+
+    class PosSale {
+        +UUID id
+        +UUID companyId
+        +UUID shiftId
+        +String saleNumber
+        +UUID clientUuid
+        +BigDecimal subtotal
+        +BigDecimal discount
+        +BigDecimal total
+        +BigDecimal totalPaid
+        +BigDecimal changeAmount
+        +SaleStatus status
+        +String nfceKey
+        +NfceStatus nfceStatus
+        +cancel()
+    }
+
+    class PosSaleItem {
+        +UUID id
+        +UUID skuId
+        +int quantity
+        +BigDecimal unitPrice
+        +BigDecimal discount
+        +BigDecimal subtotal
+    }
+
+    class PosSalePayment {
+        +UUID id
+        +PaymentMethod paymentMethod
+        +BigDecimal amount
+    }
+
     Tenant "1" --> "*" Company : possui filiais
     Tenant "1" --> "*" User : possui colaboradores
     Tenant "1" --> "*" Product : cataloga
@@ -652,6 +710,11 @@ classDiagram
     Company "1" --> "*" StockMovement : ledger movimentações
     Company "1" --> "*" BlindAudit : auditorias de retorno
     BlindAudit "1" --> "*" BlindAuditItem : contagens bipadas
+    Company "1" --> "*" CashShift : turnos de caixa
+    CashShift "1" --> "*" CashMovement : suprimentos / sangrias
+    CashShift "1" --> "*" PosSale : vendas vinculadas
+    PosSale "1" --> "*" PosSaleItem : itens vendidos
+    PosSale "1" --> "*" PosSalePayment : múltiplos pagamentos
                 </div>
             </div>
         </section>
@@ -807,6 +870,69 @@ erDiagram
         int quantity_expected
         int divergence
     }
+
+    cash_shifts {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid cashier_id FK
+        varchar shift_number UK
+        varchar status
+        numeric opening_balance
+        numeric expected_balance
+        numeric actual_balance
+        numeric divergence
+        timestamp opened_at
+        timestamp closed_at
+    }
+
+    cash_movements {
+        uuid id PK
+        uuid tenant_id FK
+        uuid shift_id FK
+        varchar movement_type
+        numeric amount
+        varchar payment_method
+        varchar reason
+        timestamp created_at
+    }
+
+    pos_sales {
+        uuid id PK
+        uuid tenant_id FK
+        uuid company_id FK
+        uuid shift_id FK
+        varchar sale_number UK
+        uuid client_uuid UK
+        numeric subtotal
+        numeric discount
+        numeric total
+        numeric total_paid
+        numeric change_amount
+        varchar status
+        varchar nfce_key
+        varchar nfce_status
+        timestamp created_at
+    }
+
+    pos_sale_items {
+        uuid id PK
+        uuid tenant_id FK
+        uuid sale_id FK
+        uuid sku_id FK
+        int quantity
+        numeric unit_price
+        numeric discount
+        numeric subtotal
+    }
+
+    pos_sale_payments {
+        uuid id PK
+        uuid tenant_id FK
+        uuid sale_id FK
+        varchar payment_method
+        numeric amount
+    }
                 </div>
             </div>
         </section>
@@ -824,6 +950,9 @@ erDiagram
                 <button class="tab-btn" onclick="switchTab('seq-s3', this)">6. S3 Presigned URLs</button>
                 <button class="tab-btn" onclick="switchTab('seq-transfer', this)">7. Transferência & Romaneio</button>
                 <button class="tab-btn" onclick="switchTab('seq-audit', this)">8. Conferência Cega & Ledger</button>
+                <button class="tab-btn" onclick="switchTab('seq-cash-shift', this)">9. Turno & Fechamento de Caixa</button>
+                <button class="tab-btn" onclick="switchTab('seq-pos-sale', this)">10. Venda Balcão & NFC-e</button>
+                <button class="tab-btn" onclick="switchTab('seq-offline-sync', this)">11. PDV Offline & Idempotência</button>
             </div>
 
             <!-- Tab 1: Tenancy -->
@@ -1083,6 +1212,115 @@ sequenceDiagram
     Service->>MoveRepo: save(StockMovement: AJUSTE_AUDITORIA com divergência e saldo após)
     Service->>AuditRepo: save(BlindAudit: CONCILIADA)
     AuditRepo-->>Ctrl: 200 OK (Auditoria concluída com divergências conciliadas)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 9: Turno & Fechamento de Caixa -->
+            <div id="seq-cash-shift" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Abertura de Caixa, Suprimento, Sangria e Fechamento Cego de Turno com Apuração de Quebra:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Caixa as Operador de Caixa / Balcão
+    participant Ctrl as PosController
+    participant Service as PosService
+    participant ShiftRepo as CashShiftRepositoryPort
+
+    Note over Caixa,ShiftRepo: 1. Abertura do Turno com Fundo de Troco
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/open (openingBalance: R$ 100,00)
+    Ctrl->>Service: openShift(companyId, 100.00, cashierId)
+    Service->>ShiftRepo: save(CashShift: ABERTO, Suprimento Inicial: R$ 100,00)
+    ShiftRepo-->>Ctrl: 201 Created (CX-2026-001)
+
+    Note over Caixa,ShiftRepo: 2. Movimentações de Suprimento e Sangria
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/{id}/supply (amount: R$ 50,00)
+    Ctrl->>Service: supplyCash(shiftId, 50.00, "Reforço troco")
+    Service->>ShiftRepo: Registra movimento SUPRIMENTO (Saldo gaveta = R$ 150,00)
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/{id}/bleed (amount: R$ 100,00)
+    Ctrl->>Service: bleedCash(shiftId, 100.00, "Retirada cofre")
+    Service->>ShiftRepo: Valida saldo >= 100 e registra SANGRIA (Saldo gaveta = R$ 50,00)
+
+    Note over Caixa,ShiftRepo: 3. Fechamento Cego de Turno
+    Caixa->>Ctrl: POST /api/v1/pos/shifts/{id}/close (countedCash: R$ 48,00)
+    Ctrl->>Service: closeShift(shiftId, 48.00)
+    Note over Service: Esperado em Dinheiro = R$ 50,00<br/>Contado = R$ 48,00<br/>Divergência = R$ -2,00 (Quebra de Caixa)
+    Service->>ShiftRepo: save(CashShift: FECHADO, divergence: -2.00)
+    ShiftRepo-->>Ctrl: 200 OK (Turno fechado com divergência registrada)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 10: Venda Balcão & NFC-e -->
+            <div id="seq-pos-sale" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Fluxo de Venda Balcão / Feira, Múltiplos Pagamentos, Baixa de Estoque e Emissão de NFC-e:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Cliente as Consumidor Presencial
+    actor Caixa as Operador PDV
+    participant Ctrl as PosController
+    participant Service as PosService
+    participant StockRepo as StockRepositoryPort
+    participant MoveRepo as StockMovementRepositoryPort
+    participant SaleRepo as PosSaleRepositoryPort
+    participant ShiftRepo as CashShiftRepositoryPort
+
+    Cliente->>Caixa: Apresenta 2 Livros (EAN-13: 9788576082675, R$ 50,00 cada)
+    Caixa->>Ctrl: POST /api/v1/pos/sales (Itens: [SKU-1: 2 un, R$ 100,00], Pagamentos: [PIX: R$ 60,00, Dinheiro: R$ 50,00])
+    Ctrl->>Service: createSale(request, cashierId)
+    Service->>StockRepo: getAvailableStock(Filial, SKU-1)
+    StockRepo-->>Service: Saldo disponível = 15 un (OK >= 2)
+    Note over Service: Subtotal: R$ 100,00 | Total Pago: R$ 110,00 | Troco: R$ 10,00
+    Service->>StockRepo: setStockQuantity (Baixa física de 2 un na filial)
+    Service->>MoveRepo: save(StockMovement: VENDA_PDV, -2 un, ref: saleId)
+    Service->>ShiftRepo: Registra recebimentos no turno do caixa
+    Note over Service: Gera Chave de Acesso de 44 dígitos (Modelo 65) e XML NFC-e
+    Service->>SaleRepo: save(PosSale: CONCLUIDA, nfceStatus: EMITIDA)
+    SaleRepo-->>Ctrl: 201 Created (VD-500)
+    Ctrl-->>Caixa: 201 Created (Retorna dados da venda e troco de R$ 10,00)
+    Caixa->>Ctrl: GET /api/v1/pos/sales/{id}/receipt
+    Ctrl-->>Caixa: Retorna cupom térmico ESC/POS com QR Code fiscal
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 11: PDV Offline & Idempotência -->
+            <div id="seq-offline-sync" class="tab-content">
+                <p style="color: #cbd5e1; margin-bottom: 12px;"><strong>Sincronização Delta de Catálogo para PWA Offline e Ingestão Resiliente com Chave de Idempotência:</strong></p>
+                <div class="diagram-container">
+                    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor PDV as PWA PDV Mobile (Offline-First)
+    participant Ctrl as PosController
+    participant Service as PosService
+    participant SaleRepo as PosSaleRepositoryPort
+    participant StockRepo as StockRepositoryPort
+
+    Note over PDV,StockRepo: 1. Carga e Atualização Delta de Catálogo
+    PDV->>Ctrl: GET /api/v1/pos/sync/catalog?companyId={standId}&updatedSince={timestamp}
+    Ctrl->>Service: syncCatalog(standId, timestamp)
+    Service-->>Ctrl: OfflineCatalogSyncResponse (Payload ultraleve com SKU, Barcode, Preço e Saldo)
+    Ctrl-->>PDV: 200 OK (Armazena no IndexedDB local do tablet/smartphone)
+
+    Note over PDV,StockRepo: 2. Vendas Realizadas Sem Conexão e Ingestão com Idempotência
+    PDV->>PDV: Realiza vendas offline gerando UUID v4 único (client_uuid) por venda
+    PDV->>Ctrl: POST /api/v1/pos/sync/offline-sales (Array com vendas acumuladas)
+    Ctrl->>Service: syncOfflineSales(salesList)
+    loop Para cada venda recebida
+        Service->>SaleRepo: findByClientUuid(tenantId, clientUuid)
+        alt Já Processada Anteriormente (Duplicata de Rede)
+            SaleRepo-->>Service: Venda existente (Ignora silenciosamente, incrementa alreadyProcessedDuplicates)
+        else Venda Nova
+            Service->>StockRepo: Baixa estoque físico do stand
+            Service->>SaleRepo: Salva venda e emite NFC-e em contingência offline
+        end
+    end
+    Service-->>Ctrl: OfflineBatchSyncResult (total: 10, processadas: 10, duplicadas: 0)
+    Ctrl-->>PDV: 200 OK (Sincronização concluída com sucesso)
                     </div>
                 </div>
             </div>
@@ -1457,6 +1695,91 @@ sequenceDiagram
                             <td><span class="badge-auth">STOCK_READ</span></td>
                             <td>Dashboard operacional de feira/evento: itens despachados, faturamento, estoque real e alertas.</td>
                         </tr>
+                        <!-- PDV Mobile, Venda Balcão, Feiras & NFC-e -->
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/pos/shifts/open</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Abertura de turno de caixa com fundo de troco inicial.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/pos/shifts/{id}/supply</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Suprimento de dinheiro no caixa (reforço de troco durante o expediente).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/pos/shifts/{id}/bleed</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Sangria de caixa (retirada de numerário com validação de saldo físico disponível).</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/pos/shifts/{id}/close</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Fechamento cego de turno com apuração de quebra/sobra de caixa.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/pos/shifts/{id}</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Obter detalhes do turno de caixa, totais por forma de pagamento e movimentações.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/pos/shifts/current</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Obter o turno atualmente aberto do operador logado para a filial ativa.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/pos/shifts</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Listagem paginada de turnos de caixa da filial.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/pos/sales</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Realizar venda no balcão/feira com múltiplos pagamentos, baixa imediata de estoque e NFC-e.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/pos/sales/{id}</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Obter detalhes completos da venda, itens e comprovante fiscal.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/pos/sales/{id}/cancel</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Cancelar venda realizada e estornar automaticamente os produtos no estoque físico.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/pos/sales</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Listar vendas realizadas na filial ou vinculadas a um turno de caixa específico.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/pos/sales/{id}/receipt</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Comprovante formatado para impressora térmica ESC/POS ou envio direto via WhatsApp.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-get">GET</span></td>
+                            <td class="endpoint-path">/api/v1/pos/sync/catalog</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Sincronização delta de catálogo e saldos locais para tablets e PDVs offline.</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method-badge method-post">POST</span></td>
+                            <td class="endpoint-path">/api/v1/pos/sync/offline-sales</td>
+                            <td><span class="badge-auth">PDV_SELL</span></td>
+                            <td>Ingestão em lote de vendas offline com deduplicação transparente via chave de idempotência.</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -1474,6 +1797,10 @@ sequenceDiagram
                 <li><strong>Reserva Temporária para Remessas de Eventos:</strong> Ao criar uma transferência para feira ou evento acadêmico, o estoque disponível na filial de origem é imediatamente reservado (<code>RESERVADO</code>), impedindo faturamento duplo e cancelamentos involuntários na matriz.</li>
                 <li><strong>Emissão de Romaneio com Peso Cúbico e Fiscal:</strong> O romaneio de carga agrupa códigos SKU, ISBNs, títulos, quantidades, pesos unitários em gramas e totais monetários para respaldo no transporte rodoviário e conferência na montagem do stand.</li>
                 <li><strong>Conferência Cega de Retorno com Bipagem e Ledger Imutável:</strong> Na volta da feira, o operador efetua a bipagem sem visualização prévia da quantidade remanescente esperada (evitando vícios de contagem). Divergências apuradas geram conciliação automática no estoque e registro permanente na trilha de auditoria contábil (<code>stock_movements</code>).</li>
+                <li><strong>Fechamento Cego de Turno de Caixa:</strong> O operador digita o saldo em dinheiro contado sem conhecer o valor teórico apurado pelo sistema. O backend calcula a divergência (quebra ou sobra) mantendo registro indelével para auditoria financeira.</li>
+                <li><strong>Trava de Segurança na Sangria de Caixa:</strong> Uma sangria é sumariamente rejeitada pelo motor de domínio caso o valor solicitado exceda o montante em dinheiro em espécie efetivamente existente na gaveta do caixa.</li>
+                <li><strong>Idempotência Rigorosa de Vendas Offline:</strong> O PDV mobile em stands ou áreas remotas gera um <code>client_uuid</code> antes de enviar a venda. Caso a conexão oscile e retransmita o lote, o backend reconhece a chave prévia e não debita o estoque nem duplica faturamento.</li>
+                <li><strong>Chave de Acesso e Protocolo NFC-e (Modelo 65):</strong> Cada venda de balcão ou feira gera uma chave canônica de 44 dígitos com dígito verificador módulo 11, XML homologado com tag <code>&lt;mod&gt;65&lt;/mod&gt;</code> e QR Code para consulta direta pelo consumidor na SEFAZ.</li>
             </ul>
         </section>
 
