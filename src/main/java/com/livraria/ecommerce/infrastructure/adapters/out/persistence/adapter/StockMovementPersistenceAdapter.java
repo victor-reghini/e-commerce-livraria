@@ -74,3 +74,4 @@ public class StockMovementPersistenceAdapter implements StockMovementRepositoryP
         );
     }
 }
+

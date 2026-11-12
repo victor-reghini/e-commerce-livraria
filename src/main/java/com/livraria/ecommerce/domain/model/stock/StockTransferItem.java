@@ -61,3 +61,4 @@ public class StockTransferItem {
     public BigDecimal getUnitCost() { return unitCost; }
     public BigDecimal getUnitPrice() { return unitPrice; }
 }
+

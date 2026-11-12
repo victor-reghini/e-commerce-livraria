@@ -328,3 +328,4 @@ class EventStockServiceTest {
         assertEquals(40, dashboard.topSellingItems().get(0).quantitySold());
     }
 }
+

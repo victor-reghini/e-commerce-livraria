@@ -101,3 +101,4 @@ public class BlindAudit {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getCompletedAt() { return completedAt; }
 }
+

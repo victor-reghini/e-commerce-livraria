@@ -32,3 +32,4 @@ public record EventDashboard(
             int minThreshold
     ) {}
 }
+

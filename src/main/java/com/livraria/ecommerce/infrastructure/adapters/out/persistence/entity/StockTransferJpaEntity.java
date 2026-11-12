@@ -73,3 +73,4 @@ public class StockTransferJpaEntity {
     @Builder.Default
     private List<StockTransferItemJpaEntity> items = new ArrayList<>();
 }
+

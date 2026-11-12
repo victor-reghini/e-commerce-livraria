@@ -13,3 +13,4 @@ public interface StockTransferRepositoryPort {
     List<StockTransfer> findAllByCompanyId(UUID tenantId, UUID companyId);
     List<StockTransfer> findAllByTenantId(UUID tenantId);
 }
+

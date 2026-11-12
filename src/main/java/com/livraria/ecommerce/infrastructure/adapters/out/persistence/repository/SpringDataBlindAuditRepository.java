@@ -17,3 +17,4 @@ public interface SpringDataBlindAuditRepository extends JpaRepository<BlindAudit
 
     List<BlindAuditJpaEntity> findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(UUID tenantId, UUID companyId);
 }
+

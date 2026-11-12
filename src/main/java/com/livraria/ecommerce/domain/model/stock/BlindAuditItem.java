@@ -52,3 +52,4 @@ public class BlindAuditItem {
     public int getDivergence() { return divergence; }
     public Instant getLastScannedAt() { return lastScannedAt; }
 }
+

@@ -22,3 +22,4 @@ public interface SpringDataStockTransferRepository extends JpaRepository<StockTr
 
     List<StockTransferJpaEntity> findAllByTenantIdOrderByCreatedAtDesc(UUID tenantId);
 }
+

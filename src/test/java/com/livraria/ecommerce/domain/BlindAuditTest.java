@@ -116,3 +116,4 @@ class BlindAuditTest {
         assertThrows(BusinessException.class, audit::reconcile);
     }
 }
+

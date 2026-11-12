@@ -143,3 +143,4 @@ CREATE POLICY blind_audit_items_tenant_isolation_policy ON blind_audit_items
     AS PERMISSIVE FOR ALL
     USING (is_bypass_rls() OR tenant_id = current_app_tenant())
     WITH CHECK (is_bypass_rls() OR tenant_id = current_app_tenant());
+

@@ -12,3 +12,4 @@ public interface BlindAuditRepositoryPort {
     Optional<BlindAudit> findByCode(UUID tenantId, String code);
     List<BlindAudit> findAllByCompanyId(UUID tenantId, UUID companyId);
 }
+

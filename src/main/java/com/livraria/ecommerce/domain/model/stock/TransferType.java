@@ -6,3 +6,4 @@ public enum TransferType {
     TRANSFERENCIA_ENTRE_FILIAIS,
     AJUSTE
 }
+

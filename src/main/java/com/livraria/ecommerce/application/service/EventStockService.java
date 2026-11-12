@@ -449,3 +449,4 @@ public class EventStockService implements EventStockUseCase {
         );
     }
 }
+

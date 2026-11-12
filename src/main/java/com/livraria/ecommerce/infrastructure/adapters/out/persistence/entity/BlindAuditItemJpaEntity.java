@@ -50,3 +50,4 @@ public class BlindAuditItemJpaEntity {
     @Column(name = "last_scanned_at")
     private Instant lastScannedAt;
 }
+

@@ -15,3 +15,4 @@ public interface SpringDataStockMovementRepository extends JpaRepository<StockMo
 
     List<StockMovementJpaEntity> findAllByTenantIdAndCompanyIdOrderByCreatedAtDesc(UUID tenantId, UUID companyId, Pageable pageable);
 }
+

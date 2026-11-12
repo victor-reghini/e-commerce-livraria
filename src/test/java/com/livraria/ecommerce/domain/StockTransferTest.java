@@ -159,3 +159,4 @@ class StockTransferTest {
         assertThrows(BusinessException.class, transfer::cancel);
     }
 }
+

@@ -41,3 +41,4 @@ public interface EventStockUseCase {
 
     EventDashboard getEventDashboard(UUID companyId);
 }
+

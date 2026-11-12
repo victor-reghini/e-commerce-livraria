@@ -13,3 +13,4 @@ public interface SpringDataBlindAuditItemRepository extends JpaRepository<BlindA
     List<BlindAuditItemJpaEntity> findAllByAuditId(UUID auditId);
     Optional<BlindAuditItemJpaEntity> findByAuditIdAndSkuId(UUID auditId, UUID skuId);
 }
+

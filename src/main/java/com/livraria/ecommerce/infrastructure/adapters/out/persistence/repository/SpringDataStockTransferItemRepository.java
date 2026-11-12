@@ -11,3 +11,4 @@ import java.util.UUID;
 public interface SpringDataStockTransferItemRepository extends JpaRepository<StockTransferItemJpaEntity, UUID> {
     List<StockTransferItemJpaEntity> findAllByTransferId(UUID transferId);
 }
+

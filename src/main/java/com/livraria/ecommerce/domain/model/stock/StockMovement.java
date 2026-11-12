@@ -45,3 +45,4 @@ public class StockMovement {
     public UUID getCreatedBy() { return createdBy; }
     public Instant getCreatedAt() { return createdAt; }
 }
+

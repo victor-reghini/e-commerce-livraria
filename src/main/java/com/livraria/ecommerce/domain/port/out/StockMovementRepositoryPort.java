@@ -10,3 +10,4 @@ public interface StockMovementRepositoryPort {
     List<StockMovement> findAllBySkuId(UUID tenantId, UUID companyId, UUID skuId);
     List<StockMovement> findAllByCompanyId(UUID tenantId, UUID companyId, int page, int size);
 }
+

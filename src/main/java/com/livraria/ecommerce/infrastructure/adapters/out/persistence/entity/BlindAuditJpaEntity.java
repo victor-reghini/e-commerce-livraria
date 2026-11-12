@@ -61,3 +61,4 @@ public class BlindAuditJpaEntity {
     @Builder.Default
     private List<BlindAuditItemJpaEntity> items = new ArrayList<>();
 }
+

@@ -229,3 +229,4 @@ class EventStockControllerTest {
                 .andExpect(jsonPath("$.currentPhysicalStock").value(80));
     }
 }
+
