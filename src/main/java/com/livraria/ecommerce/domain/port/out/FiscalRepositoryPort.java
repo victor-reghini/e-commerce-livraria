@@ -22,3 +22,4 @@ public interface FiscalRepositoryPort {
 
     List<FiscalInvoice> findAllByTenant(UUID tenantId, int page, int size);
 }
+

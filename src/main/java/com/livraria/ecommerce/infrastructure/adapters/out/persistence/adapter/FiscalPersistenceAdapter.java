@@ -157,3 +157,4 @@ public class FiscalPersistenceAdapter implements FiscalRepositoryPort {
         return invoice;
     }
 }
+

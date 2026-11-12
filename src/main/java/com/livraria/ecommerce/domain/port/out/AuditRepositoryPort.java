@@ -14,3 +14,4 @@ public interface AuditRepositoryPort {
 
     long countLogs(UUID tenantId, String action, String resourceType, Instant from, Instant to);
 }
+

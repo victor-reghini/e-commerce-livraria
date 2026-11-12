@@ -71,3 +71,4 @@ class AuditControllerTest {
         verify(auditUseCase).queryLogs(eq("USER_LOGIN"), eq("USER"), any(), any(), eq(0), eq(20));
     }
 }
+

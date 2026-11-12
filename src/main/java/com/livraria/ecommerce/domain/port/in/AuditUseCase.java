@@ -23,3 +23,4 @@ public interface AuditUseCase {
 
     long countLogs(String action, String resourceType, Instant from, Instant to);
 }
+

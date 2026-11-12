@@ -109,3 +109,4 @@ class NfeXmlBuilderTest {
         assertTrue(processedXml.contains("<xMotivo>Autorizado o uso da NF-e</xMotivo>"));
     }
 }
+

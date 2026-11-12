@@ -23,3 +23,4 @@ public interface SpringDataFiscalNumberingRepository extends JpaRepository<Fisca
             @Param("series") int series
     );
 }
+

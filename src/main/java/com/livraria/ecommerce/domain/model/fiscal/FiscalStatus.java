@@ -17,3 +17,4 @@ public enum FiscalStatus {
         return description;
     }
 }
+

@@ -50,3 +50,4 @@ class ObservabilityControllerTest {
                 .andExpect(jsonPath("$.telemetry_endpoints.health_check").value("/actuator/health"));
     }
 }
+

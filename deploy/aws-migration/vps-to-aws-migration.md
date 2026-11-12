@@ -80,3 +80,4 @@ Deploy das novas instâncias no cluster ECS Fargate atrás do ALB. As tarefas de
 3. Atualizar registros DNS no **AWS Route 53** apontando para a distribuição do **CloudFront**.
 4. Validar transações de checkout e emissão de NF-e na SEFAZ.
 5. Concluir a virada de tráfego.
+

@@ -101,3 +101,4 @@ class FiscalInvoiceTest {
         assertEquals("<xml>offline</xml>", invoice.getXmlPayload());
     }
 }
+

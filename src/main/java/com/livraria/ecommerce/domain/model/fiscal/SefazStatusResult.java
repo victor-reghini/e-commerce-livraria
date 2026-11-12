@@ -19,3 +19,4 @@ public record SefazStatusResult(
         return new SefazStatusResult(false, 108, "Serviço Paralisado Momentaneamente: " + message, uf, environment, responseTimeMs, Instant.now());
     }
 }
+

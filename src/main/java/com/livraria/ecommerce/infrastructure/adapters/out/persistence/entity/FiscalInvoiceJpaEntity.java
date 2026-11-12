@@ -95,3 +95,4 @@ public class FiscalInvoiceJpaEntity {
     @Column(name = "canceled_at")
     private Instant canceledAt;
 }
+

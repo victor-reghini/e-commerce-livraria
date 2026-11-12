@@ -12,3 +12,4 @@ public interface SefazGatewayPort {
 
     FiscalCancellationResult cancelInvoice(String accessKey, String protocolNumber, String reason, String uf);
 }
+

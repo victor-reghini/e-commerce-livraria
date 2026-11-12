@@ -292,3 +292,4 @@ public class NfeXmlBuilder {
                 .replace("'", "&apos;");
     }
 }
+

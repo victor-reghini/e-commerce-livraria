@@ -20,3 +20,4 @@ public interface SpringDataFiscalInvoiceRepository extends JpaRepository<FiscalI
 
     Page<FiscalInvoiceJpaEntity> findByTenantIdOrderByCreatedAtDesc(UUID tenantId, Pageable pageable);
 }
+

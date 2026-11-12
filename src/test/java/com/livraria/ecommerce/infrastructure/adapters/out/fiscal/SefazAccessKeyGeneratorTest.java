@@ -78,3 +78,4 @@ class SefazAccessKeyGeneratorTest {
         assertFalse(SefazAccessKeyGenerator.isValidKey(corruptedKey));
     }
 }
+

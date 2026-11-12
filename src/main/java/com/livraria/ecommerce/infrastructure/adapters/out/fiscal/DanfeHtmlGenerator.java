@@ -84,3 +84,4 @@ public class DanfeHtmlGenerator {
         return input.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }
+

@@ -102,3 +102,4 @@ public class SefazGatewayAdapter implements SefazGatewayPort {
         return FiscalCancellationResult.success(eventProtocol, accessKey);
     }
 }
+

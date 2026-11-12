@@ -26,3 +26,4 @@ public interface FiscalUseCase {
 
     List<FiscalInvoice> listInvoices(int page, int size);
 }
+

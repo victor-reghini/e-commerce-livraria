@@ -25,3 +25,4 @@ public record SefazAuthResult(
         return new SefazAuthResult(false, statusCode, reason, null, null, null, null, false, null);
     }
 }
+

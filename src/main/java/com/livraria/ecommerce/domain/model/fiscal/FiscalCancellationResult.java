@@ -18,3 +18,4 @@ public record FiscalCancellationResult(
         return new FiscalCancellationResult(false, statusCode, reason, null, accessKey, null);
     }
 }
+

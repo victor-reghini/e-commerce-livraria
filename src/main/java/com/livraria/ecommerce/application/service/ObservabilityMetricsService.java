@@ -79,3 +79,4 @@ public class ObservabilityMetricsService {
         sefazTransmissionTimer.record(durationMs, TimeUnit.MILLISECONDS);
     }
 }
+

@@ -341,3 +341,4 @@ class FiscalServiceTest {
         assertTrue(html.contains("IMUNIDADE TRIBUTÁRIA"));
     }
 }
+

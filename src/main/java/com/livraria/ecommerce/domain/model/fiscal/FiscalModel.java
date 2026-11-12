@@ -29,3 +29,4 @@ public enum FiscalModel {
         throw new IllegalArgumentException("Modelo fiscal não suportado: " + code);
     }
 }
+
