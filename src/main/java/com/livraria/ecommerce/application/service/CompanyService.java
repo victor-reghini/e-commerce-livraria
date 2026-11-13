@@ -3,21 +3,32 @@ package com.livraria.ecommerce.application.service;
 import com.livraria.ecommerce.domain.exception.BusinessException;
 import com.livraria.ecommerce.domain.exception.EntityNotFoundException;
 import com.livraria.ecommerce.domain.model.company.Company;
+import com.livraria.ecommerce.domain.port.in.AuditUseCase;
 import com.livraria.ecommerce.domain.port.in.CompanyUseCase;
 import com.livraria.ecommerce.domain.port.out.CompanyRepositoryPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class CompanyService implements CompanyUseCase {
 
     private final CompanyRepositoryPort companyRepository;
+    private final AuditUseCase auditUseCase;
+
+    @Autowired
+    public CompanyService(CompanyRepositoryPort companyRepository,
+                          @Autowired(required = false) AuditUseCase auditUseCase) {
+        this.companyRepository = companyRepository;
+        this.auditUseCase = auditUseCase;
+    }
 
     public CompanyService(CompanyRepositoryPort companyRepository) {
-        this.companyRepository = companyRepository;
+        this(companyRepository, null);
     }
 
     @Override
@@ -40,7 +51,15 @@ public class CompanyService implements CompanyUseCase {
                 command.address()
         );
 
-        return companyRepository.save(company);
+        Company saved = companyRepository.save(company);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("COMPANY_CREATED", "COMPANY", saved.getId().toString(), Map.of(
+                    "code", saved.getCode(),
+                    "tradeName", saved.getTradeName(),
+                    "cnpj", saved.getCnpj()
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -79,7 +98,14 @@ public class CompanyService implements CompanyUseCase {
                 command.address()
         );
 
-        return companyRepository.save(company);
+        Company saved = companyRepository.save(company);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("COMPANY_UPDATED", "COMPANY", saved.getId().toString(), Map.of(
+                    "tradeName", saved.getTradeName(),
+                    "cnpj", saved.getCnpj()
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -92,6 +118,12 @@ public class CompanyService implements CompanyUseCase {
             company.deactivate();
         }
         companyRepository.save(company);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("COMPANY_STATUS_TOGGLED", "COMPANY", id.toString(), Map.of(
+                    "active", active,
+                    "tradeName", company.getTradeName()
+            ));
+        }
     }
 }
 

@@ -5,9 +5,16 @@ import com.livraria.ecommerce.domain.model.audit.AuditLog;
 import com.livraria.ecommerce.domain.port.in.AuditUseCase;
 import com.livraria.ecommerce.domain.port.out.AuditRepositoryPort;
 import com.livraria.ecommerce.infrastructure.adapters.out.persistence.tenancy.TenantContext;
+import com.livraria.ecommerce.infrastructure.security.UserPrincipal;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Instant;
 import java.util.List;
@@ -48,6 +55,43 @@ public class AuditService implements AuditUseCase {
 
         UUID tenantId = TenantContext.getTenantId()
                 .orElse(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+
+        // Resolução contextual de usuário autenticado caso não fornecido explicitamente
+        if (userId == null || userEmail == null) {
+            try {
+                Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                if (auth != null && auth.getPrincipal() instanceof UserPrincipal principal) {
+                    if (userId == null) userId = principal.getId();
+                    if (userEmail == null) userEmail = principal.getEmail();
+                    if (userRole == null) userRole = principal.getRole() != null ? principal.getRole().name() : "USER";
+                } else if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
+                    if (userEmail == null) userEmail = auth.getName();
+                    if (userRole == null) userRole = "USER";
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        // Resolução contextual do endereço IP do cliente HTTP
+        if (clientIp == null) {
+            try {
+                ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attrs != null) {
+                    HttpServletRequest req = attrs.getRequest();
+                    String xForwardedFor = req.getHeader("X-Forwarded-For");
+                    if (StringUtils.hasText(xForwardedFor)) {
+                        clientIp = xForwardedFor.split(",")[0].trim();
+                    } else {
+                        clientIp = req.getRemoteAddr();
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        if (userEmail == null) userEmail = "system@livraria.com";
+        if (userRole == null) userRole = "SYSTEM";
+        if (clientIp == null) clientIp = "127.0.0.1";
 
         String detailsJson = null;
         if (details != null) {

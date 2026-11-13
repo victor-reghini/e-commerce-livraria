@@ -48,4 +48,65 @@ public class AuditController {
 
         return ResponseEntity.ok(new AuditDto.AuditLogPageResponse(responseLogs, total, page, size));
     }
+
+    @GetMapping("/actions")
+    @PreAuthorize("hasAnyAuthority('AUDIT_VIEW', 'ADMIN', 'ROLE_TENANT_ADMIN', 'ROLE_SUPER_ADMIN')")
+    @Operation(summary = "Listar todas as Ações de Auditoria Registradas",
+            description = "Retorna o catálogo completo de ações auditadas suportadas pela plataforma para filtros e validação.")
+    public ResponseEntity<List<String>> listAvailableActions() {
+        return ResponseEntity.ok(List.of(
+                "PRICE_UPDATE",
+                "SKU_UPDATE",
+                "SKU_CREATED",
+                "PRODUCT_CREATED",
+                "PRODUCT_UPDATED",
+                "STOCK_TRANSFER_CREATED",
+                "STOCK_TRANSFER_DISPATCHED",
+                "STOCK_TRANSFER_RECEIVED",
+                "STOCK_INVENTORY_RECONCILED",
+                "ORDER_CREATED",
+                "ORDER_STATUS_GATEWAY_PAID",
+                "ORDER_STATUS_SHIPPED",
+                "ORDER_STATUS_DELIVERED",
+                "ORDER_STATUS_CANCELLED",
+                "PAYMENT_WEBHOOK_EVENT",
+                "USER_CREATED",
+                "USER_UPDATED",
+                "USER_STATUS_TOGGLED",
+                "USER_PASSWORD_CHANGED",
+                "USER_PERMISSIONS_CHANGED",
+                "COMPANY_CREATED",
+                "COMPANY_UPDATED",
+                "COMPANY_STATUS_TOGGLED",
+                "TENANT_CREATED",
+                "TENANT_DOMAIN_LINKED",
+                "POS_CASH_SUPPLY",
+                "POS_CASH_WITHDRAWAL",
+                "POS_SHIFT_CLOSED",
+                "POS_SALE_CANCELLED",
+                "FISCAL_NFE_EMITTED",
+                "FISCAL_NFCE_EMITTED",
+                "FISCAL_INVOICE_CANCELLED"
+        ));
+    }
+
+    @GetMapping("/resource-types")
+    @PreAuthorize("hasAnyAuthority('AUDIT_VIEW', 'ADMIN', 'ROLE_TENANT_ADMIN', 'ROLE_SUPER_ADMIN')")
+    @Operation(summary = "Listar todos os Tipos de Recursos Auditáveis",
+            description = "Retorna os tipos de entidades monitoradas pela trilha de auditoria.")
+    public ResponseEntity<List<String>> listAvailableResourceTypes() {
+        return ResponseEntity.ok(List.of(
+                "SKU",
+                "PRODUCT",
+                "STOCK_TRANSFER",
+                "BLIND_AUDIT",
+                "ORDER",
+                "USER",
+                "COMPANY",
+                "TENANT",
+                "CASH_SHIFT",
+                "POS_SALE",
+                "FISCAL_INVOICE"
+        ));
+    }
 }

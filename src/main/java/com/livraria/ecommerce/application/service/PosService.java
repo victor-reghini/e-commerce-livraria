@@ -13,7 +13,9 @@ import com.livraria.ecommerce.domain.model.pos.SaleStatus;
 import com.livraria.ecommerce.domain.model.pos.ShiftStatus;
 import com.livraria.ecommerce.domain.model.stock.MovementType;
 import com.livraria.ecommerce.domain.model.stock.StockMovement;
+import com.livraria.ecommerce.domain.port.in.AuditUseCase;
 import com.livraria.ecommerce.domain.port.in.PosUseCase;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.livraria.ecommerce.domain.port.out.CashShiftRepositoryPort;
 import com.livraria.ecommerce.domain.port.out.PosSaleRepositoryPort;
 import com.livraria.ecommerce.domain.port.out.StockMovementRepositoryPort;
@@ -34,6 +36,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -54,6 +57,28 @@ public class PosService implements PosUseCase {
     private final SpringDataSkuRepository skuRepository;
     private final SpringDataProductRepository productRepository;
     private final SpringDataUserRepository userRepository;
+    private final AuditUseCase auditUseCase;
+
+    @Autowired
+    public PosService(CashShiftRepositoryPort shiftRepository,
+                      PosSaleRepositoryPort saleRepository,
+                      StockRepositoryPort stockRepository,
+                      StockMovementRepositoryPort movementRepository,
+                      SpringDataCompanyRepository companyRepository,
+                      SpringDataSkuRepository skuRepository,
+                      SpringDataProductRepository productRepository,
+                      SpringDataUserRepository userRepository,
+                      @Autowired(required = false) AuditUseCase auditUseCase) {
+        this.shiftRepository = shiftRepository;
+        this.saleRepository = saleRepository;
+        this.stockRepository = stockRepository;
+        this.movementRepository = movementRepository;
+        this.companyRepository = companyRepository;
+        this.skuRepository = skuRepository;
+        this.productRepository = productRepository;
+        this.userRepository = userRepository;
+        this.auditUseCase = auditUseCase;
+    }
 
     public PosService(CashShiftRepositoryPort shiftRepository,
                       PosSaleRepositoryPort saleRepository,
@@ -63,14 +88,7 @@ public class PosService implements PosUseCase {
                       SpringDataSkuRepository skuRepository,
                       SpringDataProductRepository productRepository,
                       SpringDataUserRepository userRepository) {
-        this.shiftRepository = shiftRepository;
-        this.saleRepository = saleRepository;
-        this.stockRepository = stockRepository;
-        this.movementRepository = movementRepository;
-        this.companyRepository = companyRepository;
-        this.skuRepository = skuRepository;
-        this.productRepository = productRepository;
-        this.userRepository = userRepository;
+        this(shiftRepository, saleRepository, stockRepository, movementRepository, companyRepository, skuRepository, productRepository, userRepository, null);
     }
 
     private UUID getTenantId() {
@@ -113,7 +131,16 @@ public class PosService implements PosUseCase {
                 .orElseThrow(() -> new EntityNotFoundException("Turno de caixa não encontrado: ", shiftId));
 
         shift.addSupply(amount, reason, operatorId);
-        return shiftRepository.save(shift);
+        CashShift saved = shiftRepository.save(shift);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("POS_CASH_SUPPLY", "CASH_SHIFT", saved.getId().toString(), Map.of(
+                    "shiftNumber", saved.getShiftNumber(),
+                    "amount", amount,
+                    "reason", reason != null ? reason : "",
+                    "operatorId", operatorId.toString()
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -122,7 +149,16 @@ public class PosService implements PosUseCase {
                 .orElseThrow(() -> new EntityNotFoundException("Turno de caixa não encontrado: ", shiftId));
 
         shift.addBleed(amount, reason, operatorId);
-        return shiftRepository.save(shift);
+        CashShift saved = shiftRepository.save(shift);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("POS_CASH_WITHDRAWAL", "CASH_SHIFT", saved.getId().toString(), Map.of(
+                    "shiftNumber", saved.getShiftNumber(),
+                    "amount", amount,
+                    "reason", reason != null ? reason : "",
+                    "operatorId", operatorId.toString()
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -131,7 +167,16 @@ public class PosService implements PosUseCase {
                 .orElseThrow(() -> new EntityNotFoundException("Turno de caixa não encontrado: ", shiftId));
 
         shift.closeBlind(countedCash, notes);
-        return shiftRepository.save(shift);
+        CashShift saved = shiftRepository.save(shift);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("POS_SHIFT_CLOSED", "CASH_SHIFT", saved.getId().toString(), Map.of(
+                    "shiftNumber", saved.getShiftNumber(),
+                    "countedCash", countedCash,
+                    "operatorId", operatorId != null ? operatorId.toString() : "",
+                    "notes", notes != null ? notes : ""
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -279,7 +324,16 @@ public class PosService implements PosUseCase {
             ));
         }
 
-        return saleRepository.save(sale);
+        PosSale saved = saleRepository.save(sale);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("POS_SALE_CANCELLED", "POS_SALE", saved.getId().toString(), Map.of(
+                    "saleNumber", saved.getSaleNumber(),
+                    "totalAmount", saved.getTotal(),
+                    "reason", reason != null ? reason : "",
+                    "operatorId", operatorId.toString()
+            ));
+        }
+        return saved;
     }
 
     @Override

@@ -4,21 +4,32 @@ import com.livraria.ecommerce.domain.exception.BusinessException;
 import com.livraria.ecommerce.domain.exception.TenantNotFoundException;
 import com.livraria.ecommerce.domain.model.tenant.Tenant;
 import com.livraria.ecommerce.domain.model.tenant.TenantDomain;
+import com.livraria.ecommerce.domain.port.in.AuditUseCase;
 import com.livraria.ecommerce.domain.port.in.TenantUseCase;
 import com.livraria.ecommerce.domain.port.out.TenantRepositoryPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class TenantService implements TenantUseCase {
 
     private final TenantRepositoryPort tenantRepository;
+    private final AuditUseCase auditUseCase;
+
+    @Autowired
+    public TenantService(TenantRepositoryPort tenantRepository,
+                         @Autowired(required = false) AuditUseCase auditUseCase) {
+        this.tenantRepository = tenantRepository;
+        this.auditUseCase = auditUseCase;
+    }
 
     public TenantService(TenantRepositoryPort tenantRepository) {
-        this.tenantRepository = tenantRepository;
+        this(tenantRepository, null);
     }
 
     @Override
@@ -43,6 +54,14 @@ public class TenantService implements TenantUseCase {
         if (command.primaryDomain() != null && !command.primaryDomain().isBlank()) {
             TenantDomain primaryDomain = TenantDomain.create(savedTenant.getId(), command.primaryDomain(), true);
             tenantRepository.saveDomain(primaryDomain);
+        }
+
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("TENANT_CREATED", "TENANT", savedTenant.getId().toString(), Map.of(
+                    "name", savedTenant.getName(),
+                    "slug", savedTenant.getSlug(),
+                    "cnpj", savedTenant.getCnpj()
+            ));
         }
 
         return savedTenant;
@@ -81,6 +100,12 @@ public class TenantService implements TenantUseCase {
         Tenant tenant = getTenantById(tenantId);
         TenantDomain tenantDomain = TenantDomain.create(tenant.getId(), domain, primary);
         tenantRepository.saveDomain(tenantDomain);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("TENANT_DOMAIN_LINKED", "TENANT", tenantId.toString(), Map.of(
+                    "domain", domain,
+                    "primary", primary
+            ));
+        }
     }
 }
 

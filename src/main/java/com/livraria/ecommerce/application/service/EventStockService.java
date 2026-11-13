@@ -13,7 +13,9 @@ import com.livraria.ecommerce.domain.model.stock.StockTransfer;
 import com.livraria.ecommerce.domain.model.stock.StockTransferItem;
 import com.livraria.ecommerce.domain.model.stock.TransferStatus;
 import com.livraria.ecommerce.domain.model.stock.TransferType;
+import com.livraria.ecommerce.domain.port.in.AuditUseCase;
 import com.livraria.ecommerce.domain.port.in.EventStockUseCase;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.livraria.ecommerce.domain.port.out.BlindAuditRepositoryPort;
 import com.livraria.ecommerce.domain.port.out.StockMovementRepositoryPort;
 import com.livraria.ecommerce.domain.port.out.StockRepositoryPort;
@@ -56,6 +58,28 @@ public class EventStockService implements EventStockUseCase {
     private final SpringDataCompanyRepository companyRepository;
     private final SpringDataSkuRepository skuRepository;
     private final SpringDataProductRepository productRepository;
+    private final AuditUseCase auditUseCase;
+
+    @Autowired
+    public EventStockService(StockTransferRepositoryPort transferRepository,
+                             BlindAuditRepositoryPort auditRepository,
+                             StockMovementRepositoryPort movementRepository,
+                             StockRepositoryPort stockRepository,
+                             SpringDataStockItemRepository stockItemRepository,
+                             SpringDataCompanyRepository companyRepository,
+                             SpringDataSkuRepository skuRepository,
+                             SpringDataProductRepository productRepository,
+                             @Autowired(required = false) AuditUseCase auditUseCase) {
+        this.transferRepository = transferRepository;
+        this.auditRepository = auditRepository;
+        this.movementRepository = movementRepository;
+        this.stockRepository = stockRepository;
+        this.stockItemRepository = stockItemRepository;
+        this.companyRepository = companyRepository;
+        this.skuRepository = skuRepository;
+        this.productRepository = productRepository;
+        this.auditUseCase = auditUseCase;
+    }
 
     public EventStockService(StockTransferRepositoryPort transferRepository,
                              BlindAuditRepositoryPort auditRepository,
@@ -65,14 +89,7 @@ public class EventStockService implements EventStockUseCase {
                              SpringDataCompanyRepository companyRepository,
                              SpringDataSkuRepository skuRepository,
                              SpringDataProductRepository productRepository) {
-        this.transferRepository = transferRepository;
-        this.auditRepository = auditRepository;
-        this.movementRepository = movementRepository;
-        this.stockRepository = stockRepository;
-        this.stockItemRepository = stockItemRepository;
-        this.companyRepository = companyRepository;
-        this.skuRepository = skuRepository;
-        this.productRepository = productRepository;
+        this(transferRepository, auditRepository, movementRepository, stockRepository, stockItemRepository, companyRepository, skuRepository, productRepository, null);
     }
 
     private UUID getTenantId() {
@@ -135,7 +152,17 @@ public class EventStockService implements EventStockUseCase {
                 request.notes(), items, null, null, createdBy, null, Instant.now(), Instant.now()
         );
 
-        return transferRepository.save(transfer);
+        StockTransfer saved = transferRepository.save(transfer);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("STOCK_TRANSFER_CREATED", "STOCK_TRANSFER", saved.getId().toString(), Map.of(
+                    "transferNumber", saved.getTransferNumber(),
+                    "originCompanyId", saved.getOriginCompanyId(),
+                    "destinationCompanyId", saved.getDestinationCompanyId(),
+                    "itemsCount", saved.getItems().size(),
+                    "totalQuantity", saved.calculateTotalItems()
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -167,7 +194,14 @@ public class EventStockService implements EventStockUseCase {
             ));
         }
 
-        return transferRepository.save(transfer);
+        StockTransfer saved = transferRepository.save(transfer);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("STOCK_TRANSFER_DISPATCHED", "STOCK_TRANSFER", saved.getId().toString(), Map.of(
+                    "transferNumber", saved.getTransferNumber(),
+                    "dispatchedBy", dispatchedBy.toString()
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -194,7 +228,15 @@ public class EventStockService implements EventStockUseCase {
             }
         }
 
-        return transferRepository.save(transfer);
+        StockTransfer saved = transferRepository.save(transfer);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("STOCK_TRANSFER_RECEIVED", "STOCK_TRANSFER", saved.getId().toString(), Map.of(
+                    "transferNumber", saved.getTransferNumber(),
+                    "receivedBy", receivedBy.toString(),
+                    "status", saved.getStatus().name()
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -349,7 +391,16 @@ public class EventStockService implements EventStockUseCase {
             }
         }
 
-        return auditRepository.save(audit);
+        BlindAudit saved = auditRepository.save(audit);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("STOCK_INVENTORY_RECONCILED", "BLIND_AUDIT", saved.getId().toString(), Map.of(
+                    "code", saved.getCode(),
+                    "companyId", saved.getCompanyId().toString(),
+                    "reconciledBy", reconciledBy.toString(),
+                    "status", saved.getStatus().name()
+            ));
+        }
+        return saved;
     }
 
     @Override

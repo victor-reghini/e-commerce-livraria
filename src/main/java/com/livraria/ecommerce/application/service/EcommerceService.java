@@ -16,6 +16,7 @@ import com.livraria.ecommerce.domain.model.ecommerce.PaymentTransactionResult;
 import com.livraria.ecommerce.domain.model.ecommerce.ShippingAddress;
 import com.livraria.ecommerce.domain.model.ecommerce.ShippingQuote;
 import com.livraria.ecommerce.domain.model.stock.MovementType;
+import com.livraria.ecommerce.domain.port.in.AuditUseCase;
 import com.livraria.ecommerce.domain.port.in.EcommerceUseCase;
 import com.livraria.ecommerce.domain.port.out.CartRepositoryPort;
 import com.livraria.ecommerce.domain.port.out.OrderRepositoryPort;
@@ -45,6 +46,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -66,6 +68,7 @@ public class EcommerceService implements EcommerceUseCase {
     private final SpringDataCompanyRepository companyRepository;
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
+    private final AuditUseCase auditUseCase;
 
     @Autowired
     public EcommerceService(CartRepositoryPort cartRepository,
@@ -79,7 +82,8 @@ public class EcommerceService implements EcommerceUseCase {
                             SpringDataStockMovementRepository stockMovementRepository,
                             SpringDataCompanyRepository companyRepository,
                             @Autowired(required = false) RabbitTemplate rabbitTemplate,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            @Autowired(required = false) AuditUseCase auditUseCase) {
         this.cartRepository = cartRepository;
         this.orderRepository = orderRepository;
         this.webhookRepository = webhookRepository;
@@ -92,6 +96,22 @@ public class EcommerceService implements EcommerceUseCase {
         this.companyRepository = companyRepository;
         this.rabbitTemplate = rabbitTemplate;
         this.objectMapper = objectMapper;
+        this.auditUseCase = auditUseCase;
+    }
+
+    public EcommerceService(CartRepositoryPort cartRepository,
+                            OrderRepositoryPort orderRepository,
+                            WebhookEventRepositoryPort webhookRepository,
+                            PagarmeGatewayPort pagarmeGateway,
+                            ShippingCalculatorPort shippingCalculator,
+                            SpringDataSkuRepository skuRepository,
+                            SpringDataProductRepository productRepository,
+                            SpringDataStockItemRepository stockItemRepository,
+                            SpringDataStockMovementRepository stockMovementRepository,
+                            SpringDataCompanyRepository companyRepository,
+                            RabbitTemplate rabbitTemplate,
+                            ObjectMapper objectMapper) {
+        this(cartRepository, orderRepository, webhookRepository, pagarmeGateway, shippingCalculator, skuRepository, productRepository, stockItemRepository, stockMovementRepository, companyRepository, rabbitTemplate, objectMapper, null);
     }
 
     @Override
@@ -297,6 +317,15 @@ public class EcommerceService implements EcommerceUseCase {
 
         orderRepository.save(order);
 
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("ORDER_CREATED", "ORDER", order.getId().toString(), Map.of(
+                    "orderNumber", order.getOrderNumber(),
+                    "totalAmount", order.getTotalAmount(),
+                    "status", order.getStatus().name(),
+                    "itemsCount", order.getItems().size()
+            ));
+        }
+
         // Limpar carrinho após checkout bem-sucedido
         cart.clear();
         cartRepository.save(cart);
@@ -357,6 +386,24 @@ public class EcommerceService implements EcommerceUseCase {
                                     releaseReservationAndDecrementStock(tenantId, order.getOriginCompanyId(), order);
                                     orderRepository.save(order);
                                     log.info("Pedido {} marcado como PAGO via webhook Pagar.me", order.getOrderNumber());
+
+                                    if (auditUseCase != null) {
+                                        auditUseCase.recordEvent(
+                                                null,
+                                                "webhook@pagar.me",
+                                                "INTEGRATION_GATEWAY",
+                                                "127.0.0.1",
+                                                "ORDER_STATUS_GATEWAY_PAID",
+                                                "ORDER",
+                                                order.getId().toString(),
+                                                Map.of(
+                                                        "orderNumber", order.getOrderNumber(),
+                                                        "gatewayTxId", finalTxId,
+                                                        "eventType", eventType,
+                                                        "totalAmount", order.getTotalAmount()
+                                                )
+                                        );
+                                    }
                                 }
                                 break;
                             }
@@ -402,7 +449,15 @@ public class EcommerceService implements EcommerceUseCase {
     public Order shipOrder(UUID tenantId, UUID orderId, String trackingCode, String trackingUrl) {
         Order order = getOrder(tenantId, orderId);
         order.ship(trackingCode, trackingUrl);
-        return orderRepository.save(order);
+        Order saved = orderRepository.save(order);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("ORDER_STATUS_SHIPPED", "ORDER", saved.getId().toString(), Map.of(
+                    "orderNumber", saved.getOrderNumber(),
+                    "trackingCode", trackingCode,
+                    "trackingUrl", trackingUrl != null ? trackingUrl : ""
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -410,7 +465,13 @@ public class EcommerceService implements EcommerceUseCase {
     public Order deliverOrder(UUID tenantId, UUID orderId) {
         Order order = getOrder(tenantId, orderId);
         order.deliver();
-        return orderRepository.save(order);
+        Order saved = orderRepository.save(order);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("ORDER_STATUS_DELIVERED", "ORDER", saved.getId().toString(), Map.of(
+                    "orderNumber", saved.getOrderNumber()
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -427,7 +488,15 @@ public class EcommerceService implements EcommerceUseCase {
             cancelReservationForOrder(tenantId, order.getOriginCompanyId(), order);
         }
 
-        return orderRepository.save(order);
+        Order saved = orderRepository.save(order);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("ORDER_STATUS_CANCELLED", "ORDER", saved.getId().toString(), Map.of(
+                    "orderNumber", saved.getOrderNumber(),
+                    "reason", reason,
+                    "previousStatus", oldStatus.name()
+            ));
+        }
+        return saved;
     }
 
     // --- Auxiliares de Estoque ---

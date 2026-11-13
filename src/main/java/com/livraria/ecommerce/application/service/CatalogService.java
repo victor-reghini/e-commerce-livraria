@@ -15,6 +15,7 @@ import com.livraria.ecommerce.domain.model.catalog.Product;
 import com.livraria.ecommerce.domain.model.catalog.ProductAuthor;
 import com.livraria.ecommerce.domain.model.catalog.Publisher;
 import com.livraria.ecommerce.domain.model.catalog.Sku;
+import com.livraria.ecommerce.domain.port.in.AuditUseCase;
 import com.livraria.ecommerce.domain.port.in.CatalogUseCase;
 import com.livraria.ecommerce.domain.port.out.AuthorRepositoryPort;
 import com.livraria.ecommerce.domain.port.out.CategoryRepositoryPort;
@@ -23,6 +24,7 @@ import com.livraria.ecommerce.domain.port.out.PublisherRepositoryPort;
 import com.livraria.ecommerce.domain.port.out.SkuRepositoryPort;
 import com.livraria.ecommerce.domain.port.out.StockRepositoryPort;
 import com.livraria.ecommerce.domain.port.out.StoragePort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +34,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Map;
 import java.util.UUID;
 
@@ -46,12 +50,32 @@ public class CatalogService implements CatalogUseCase {
     private final PublisherRepositoryPort publisherRepository;
     private final StockRepositoryPort stockRepository;
     private final StoragePort storagePort;
+    private final AuditUseCase auditUseCase;
 
     @Value("${aws.s3.bucket-media:ecommerce-media}")
     private String mediaBucket;
 
     @Value("${aws.s3.bucket-ebooks:ecommerce-ebooks}")
     private String ebooksBucket;
+
+    @Autowired
+    public CatalogService(ProductRepositoryPort productRepository,
+                          SkuRepositoryPort skuRepository,
+                          CategoryRepositoryPort categoryRepository,
+                          AuthorRepositoryPort authorRepository,
+                          PublisherRepositoryPort publisherRepository,
+                          StockRepositoryPort stockRepository,
+                          StoragePort storagePort,
+                          @Autowired(required = false) AuditUseCase auditUseCase) {
+        this.productRepository = productRepository;
+        this.skuRepository = skuRepository;
+        this.categoryRepository = categoryRepository;
+        this.authorRepository = authorRepository;
+        this.publisherRepository = publisherRepository;
+        this.stockRepository = stockRepository;
+        this.storagePort = storagePort;
+        this.auditUseCase = auditUseCase;
+    }
 
     public CatalogService(ProductRepositoryPort productRepository,
                           SkuRepositoryPort skuRepository,
@@ -60,13 +84,7 @@ public class CatalogService implements CatalogUseCase {
                           PublisherRepositoryPort publisherRepository,
                           StockRepositoryPort stockRepository,
                           StoragePort storagePort) {
-        this.productRepository = productRepository;
-        this.skuRepository = skuRepository;
-        this.categoryRepository = categoryRepository;
-        this.authorRepository = authorRepository;
-        this.publisherRepository = publisherRepository;
-        this.stockRepository = stockRepository;
-        this.storagePort = storagePort;
+        this(productRepository, skuRepository, categoryRepository, authorRepository, publisherRepository, stockRepository, storagePort, null);
     }
 
     @Override
@@ -102,6 +120,14 @@ public class CatalogService implements CatalogUseCase {
         }
 
         Product savedProduct = productRepository.save(product);
+
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("PRODUCT_CREATED", "PRODUCT", savedProduct.getId().toString(), Map.of(
+                    "title", savedProduct.getTitle(),
+                    "slug", savedProduct.getSlug(),
+                    "productType", savedProduct.getProductType().name()
+            ));
+        }
 
         if (request.initialSkus() != null && !request.initialSkus().isEmpty()) {
             for (CatalogDto.CreateSkuRequest skuReq : request.initialSkus()) {
@@ -140,7 +166,14 @@ public class CatalogService implements CatalogUseCase {
             product.setAuthors(authors);
         }
 
-        return productRepository.save(product);
+        Product saved = productRepository.save(product);
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("PRODUCT_UPDATED", "PRODUCT", saved.getId().toString(), Map.of(
+                    "title", saved.getTitle(),
+                    "active", saved.isActive()
+            ));
+        }
+        return saved;
     }
 
     @Override
@@ -250,6 +283,15 @@ public class CatalogService implements CatalogUseCase {
 
         Sku saved = skuRepository.save(sku);
         product.addSku(saved);
+
+        if (auditUseCase != null) {
+            auditUseCase.recordEvent("SKU_CREATED", "SKU", saved.getId().toString(), Map.of(
+                    "skuCode", saved.getSkuCode(),
+                    "price", saved.getPrice(),
+                    "isbn", saved.getIsbn() != null ? saved.getIsbn() : ""
+            ));
+        }
+
         return saved;
     }
 
@@ -257,6 +299,10 @@ public class CatalogService implements CatalogUseCase {
     @Transactional
     public Sku updateSku(UUID skuId, CatalogDto.UpdateSkuRequest request) {
         Sku sku = getSkuById(skuId);
+
+        BigDecimal oldPrice = sku.getPrice();
+        BigDecimal oldPromo = sku.getPromotionalPrice();
+        BigDecimal oldCost = sku.getCostPrice();
 
         Dimensions dimensions = new Dimensions(
                 request.height() != null ? request.height() : sku.getDimensions().height(),
@@ -306,7 +352,39 @@ public class CatalogService implements CatalogUseCase {
                 request.active()
         );
 
-        return skuRepository.save(sku);
+        Sku saved = skuRepository.save(sku);
+
+        if (auditUseCase != null) {
+            boolean priceChanged = (request.price() != null && !request.price().equals(oldPrice));
+            boolean promoChanged = (request.promotionalPrice() != null && !request.promotionalPrice().equals(oldPromo));
+            boolean costChanged = (request.costPrice() != null && !request.costPrice().equals(oldCost));
+
+            if (priceChanged || promoChanged || costChanged) {
+                Map<String, Object> diff = new HashMap<>();
+                diff.put("skuCode", saved.getSkuCode());
+                diff.put("isbn", saved.getIsbn());
+                if (priceChanged) {
+                    diff.put("oldPrice", oldPrice);
+                    diff.put("newPrice", saved.getPrice());
+                }
+                if (promoChanged) {
+                    diff.put("oldPromotionalPrice", oldPromo);
+                    diff.put("newPromotionalPrice", saved.getPromotionalPrice());
+                }
+                if (costChanged) {
+                    diff.put("oldCostPrice", oldCost);
+                    diff.put("newCostPrice", saved.getCostPrice());
+                }
+                auditUseCase.recordEvent("PRICE_UPDATE", "SKU", saved.getId().toString(), diff);
+            } else {
+                auditUseCase.recordEvent("SKU_UPDATE", "SKU", saved.getId().toString(), Map.of(
+                        "skuCode", saved.getSkuCode(),
+                        "active", saved.isActive()
+                ));
+            }
+        }
+
+        return saved;
     }
 
     @Override
