@@ -1335,9 +1335,27 @@ curl -X POST "http://localhost:8080/api/v1/products/import" \
 
 ---
 
-## 4. Deploy em Produção (VPS Linux)
+## 4. Deploy em Produção (VPS Linux - Hostinger KVM2: 8GB RAM, 2 vCPUs)
 
-Para implantação em servidor VPS (Ubuntu/Debian), utilize a orquestração `docker-compose.vps.yml`:
+Com o **Frontend desacoplado e hospedado no Netlify**, 100% dos recursos da VPS ficam dedicados à infraestrutura de backend, dados e mensageria. A orquestração [docker-compose.vps.yml](docker-compose.vps.yml) foi calibrada especificamente para uma máquina de **8 GB de RAM e 2 vCPUs**:
+
+### Orçamento de Memória e vCPU (8 GB RAM / 2 vCPUs)
+
+| Container / Serviço | Limite Memória | Reserva (Base) | Limite CPU | Otimizações Específicas Aplicadas |
+| :--- | :--- | :--- | :--- | :--- |
+| **Backend (Java 21 / Spring Boot 3)** | `1792 MB` | `1024 MB` | `1.8 vCPU` | G1GC (`MaxGCPauseMillis=100`), String Deduplication, Virtual Threads, Heap: `-Xms768m -Xmx1344m`, HikariCP: `max=10, min=4` |
+| **PostgreSQL 16 (Alpine)** | `1536 MB` | `512 MB` | `1.5 vCPU` | `shared_buffers=384MB`, `effective_cache_size=1280MB`, `work_mem=8MB`, `random_page_cost=1.1` (NVMe), `max_conn=60` |
+| **Redis 7.2 (Alpine)** | `384 MB` | `128 MB` | `0.5 vCPU` | `--maxmemory 256mb`, política `allkeys-lru`, AOF persistente |
+| **RabbitMQ 3.13 (Alpine)** | `512 MB` | `256 MB` | `0.75 vCPU` | `RABBITMQ_VM_MEMORY_HIGH_WATERMARK=0.6`, thread pooling Erlang otimizado |
+| **MinIO (S3 Local)** | `512 MB` | `256 MB` | `0.75 vCPU` | `GOMAXPROCS=1`, upload/download de mídia e e-books |
+| **Traefik v3.1 (Proxy + SSL)** | `192 MB` | `64 MB` | `0.5 vCPU` | Let's Encrypt automático, compressão gzip/zstd, roteamento SSL |
+| **Prometheus v2.54** | `384 MB` | `192 MB` | `0.5 vCPU` | Scrape a cada 30s (redução de 66% de overhead de CPU), retenção de 7 dias / 4GB |
+| **Grafana Loki 3.2** | `384 MB` | `192 MB` | `0.5 vCPU` | Compactador e retenção ativa de 7 dias (168h), TSDB filesystem |
+| **Grafana Promtail 3.2** | `128 MB` | `64 MB` | `0.25 vCPU` | Scrape de Docker socket com intervalo de 15s |
+| **Grafana 11.2** | `256 MB` | `128 MB` | `0.5 vCPU` | Dashboard persistente, visualização rápida |
+| **Buffer Livre (OS / Linux Cache)** | **~2.1 GB** | — | — | Headroom reservado para Kernel, Docker daemon e Linux Page Cache do NVMe |
+
+### Comandos de Inicialização na VPS
 
 ```bash
 # 1. Configurar variáveis no servidor
@@ -1346,6 +1364,20 @@ nano .env  # Configurar DOMAIN_NAME, TRAEFIK_ACME_EMAIL e senhas seguras
 
 # 2. Inicializar os serviços com Traefik, SSL Let's Encrypt e limites de recursos
 docker compose -f docker-compose.vps.yml up -d
+```
+
+### Otimizações do Sistema Operacional Ubuntu (Host KVM2)
+Execute uma única vez no servidor Ubuntu para garantir estabilidade e evitar OOM killer:
+```bash
+# Criar swapfile de 4GB no NVMe como rede de segurança
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+# Ajustar parâmetros de kernel recomendados para banco e containers
+sudo sysctl -w vm.swappiness=10
+sudo sysctl -w vm.max_map_count=262144
+sudo sysctl -w fs.file-max=2097152
 ```
 
 ### Rotina de Backup Automatizado do Banco

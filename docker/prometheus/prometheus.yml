@@ -4,13 +4,13 @@
 # ==============================================================================
 
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 30s
+  evaluation_interval: 30s
 
 scrape_configs:
   - job_name: "ecommerce-backend"
     metrics_path: "/actuator/prometheus"
-    scrape_interval: 10s
+    scrape_interval: 30s
     static_configs:
       - targets: ["backend:8080"]
         labels:
@@ -18,6 +18,7 @@ scrape_configs:
           environment: "production"
 
   - job_name: "prometheus"
+    scrape_interval: 60s
     static_configs:
       - targets: ["localhost:9090"]
 

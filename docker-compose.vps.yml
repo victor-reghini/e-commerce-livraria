@@ -25,8 +25,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 512M
+          cpus: "0.5"
+          memory: 192M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
     networks:
       - app-network
 
@@ -41,9 +44,25 @@ services:
       POSTGRES_DB: ${DATABASE_NAME:-ecommerce_db}
       POSTGRES_USER: ${DATABASE_USER:-ecommerce_user}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-ecommerce_secret_password}
+    command: >
+      postgres
+      -c shared_buffers=384MB
+      -c effective_cache_size=1280MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c min_wal_size=512MB
+      -c max_wal_size=2GB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c max_connections=60
     volumes:
       - /var/lib/ecommerce/postgres:/var/lib/postgresql/data
       - ./docker/postgres/init-db.sql:/docker-entrypoint-initdb.d/01-init-db.sql:ro
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-ecommerce_user} -d ${DATABASE_NAME:-ecommerce_db}"]
       interval: 10s
@@ -52,8 +71,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 2048M
+          cpus: "1.5"
+          memory: 1536M
+        reservations:
+          cpus: "0.3"
+          memory: 512M
     networks:
       - app-network
 
@@ -68,10 +90,12 @@ services:
       redis-server
       --requirepass ${SPRING_DATA_REDIS_PASSWORD:-redis_secret_password}
       --appendonly yes
-      --maxmemory 512mb
+      --maxmemory 256mb
       --maxmemory-policy allkeys-lru
     volumes:
       - /var/lib/ecommerce/redis:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${SPRING_DATA_REDIS_PASSWORD:-redis_secret_password}", "ping"]
       interval: 10s
@@ -80,8 +104,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 512M
+          cpus: "0.5"
+          memory: 384M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
     networks:
       - app-network
 
@@ -89,15 +116,19 @@ services:
   # 4. Armazenamento S3-Compatible Local (MinIO)
   # ============================================================================
   minio:
-    image: minio/minio:RELEASE.2024-10-02T17-50-41Z
+    image: pgsty/minio:latest
     container_name: ecommerce-minio
     restart: always
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio_admin_user}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_admin_secret_password}
+      GOMAXPROCS: "1"
     volumes:
       - /var/lib/ecommerce/minio:/data
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
@@ -106,8 +137,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 1024M
+          cpus: "0.75"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 256M
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.minio-api.rule=Host(`s3.${DOMAIN_NAME:-seudominio.com.br}`)"
@@ -118,7 +152,7 @@ services:
       - app-network
 
   minio-init:
-    image: minio/mc:RELEASE.2024-10-02T08-27-28Z
+    image: pgsty/mc:latest
     container_name: ecommerce-minio-init
     depends_on:
       minio:
@@ -148,16 +182,23 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-rabbit_secret_password}
     volumes:
       - /var/lib/ecommerce/rabbitmq:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 1024M
+          cpus: "0.75"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 256M
     networks:
       - app-network
 
@@ -168,14 +209,25 @@ services:
     image: prom/prometheus:v2.54.1
     container_name: ecommerce-prometheus
     restart: always
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--storage.tsdb.retention.size=4GB"
+      - "--web.enable-lifecycle"
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
     deploy:
       resources:
         limits:
           cpus: "0.5"
-          memory: 512M
+          memory: 384M
+        reservations:
+          cpus: "0.1"
+          memory: 192M
     networks:
       - app-network
 
@@ -186,12 +238,17 @@ services:
     volumes:
       - ./docker/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
     command: -config.file=/etc/loki/local-config.yaml
     deploy:
       resources:
         limits:
           cpus: "0.5"
-          memory: 512M
+          memory: 384M
+        reservations:
+          cpus: "0.1"
+          memory: 192M
     networks:
       - app-network
 
@@ -207,8 +264,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.2"
-          memory: 256M
+          cpus: "0.25"
+          memory: 128M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
     networks:
       - app-network
 
@@ -225,11 +285,16 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${GRAFANA_PORT:-3030}:3000"
     deploy:
       resources:
         limits:
           cpus: "0.5"
-          memory: 512M
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.grafana.rule=Host(`${GRAFANA_SUBDOMAIN:-grafana.seudominio.com.br}`)"
@@ -264,6 +329,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DATABASE_NAME:-ecommerce_db}
       SPRING_DATASOURCE_USERNAME: ${DATABASE_USER:-ecommerce_user}
       SPRING_DATASOURCE_PASSWORD: ${DATABASE_PASSWORD:-ecommerce_secret_password}
+      HIKARI_MAX_POOL_SIZE: 10
+      HIKARI_MIN_IDLE: 4
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_DATA_REDIS_PASSWORD: ${SPRING_DATA_REDIS_PASSWORD:-redis_secret_password}
@@ -279,16 +346,34 @@ services:
       AWS_S3_BUCKET_MEDIA: ${AWS_S3_BUCKET_MEDIA:-ecommerce-media}
       AWS_S3_BUCKET_EBOOKS: ${AWS_S3_BUCKET_EBOOKS:-ecommerce-ebooks}
       JWT_SECRET: ${JWT_SECRET}
+      JAVA_OPTS: >-
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=100
+        -XX:+UseStringDeduplication
+        -Xms768m
+        -Xmx1344m
+        -XX:MetaspaceSize=128m
+        -XX:MaxMetaspaceSize=256m
+        -XX:+ExitOnOutOfMemoryError
+        -Djava.security.egd=file:/dev/./urandom
+        -Dspring.threads.virtual.enabled=true
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 2048M
+          cpus: "1.8"
+          memory: 1792M
+        reservations:
+          cpus: "0.5"
+          memory: 1024M
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`${BACKEND_SUBDOMAIN:-api.seudominio.com.br}`) || HostRegexp(`{subdomain:[a-z0-9-]+}.${DOMAIN_NAME:-seudominio.com.br}`)"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.backend.middlewares=backend-compress@docker"
+      - "traefik.http.middlewares.backend-compress.compress=true"
       - "traefik.http.services.backend.loadbalancer.server.port=8080"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q 'UP' || exit 1"]
